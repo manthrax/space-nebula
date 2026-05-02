@@ -38,8 +38,8 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-            "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js"
+            "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+            "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js"
         }
     }
     </script>
@@ -49,7 +49,7 @@
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
         // Importing the library directly from your GitHub!
-        import Nebularity from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/Nebularity.js';
+        import Nebularity from "./Nebularity.js";//'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/Nebularity.js';
 
         // 1. Basic Three.js Setup
         const scene = new THREE.Scene();
@@ -65,8 +65,6 @@
 
         // 1. Initialize Nebularity
         const nebula = new Nebularity(THREE, renderer);
-        scene.background = nebula.texture;
-        scene.environment = nebula.texture;
 
         // 2. The "One-Liner" Library Call
         // This generates the cubemap and starts a morph
@@ -76,6 +74,9 @@
             nebulae: true,
             sun: true
         });
+
+        scene.background = nebula.texture;
+        scene.environment = nebula.texture;
 
         const clock = new THREE.Clock();
 
