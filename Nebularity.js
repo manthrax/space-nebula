@@ -43,6 +43,12 @@ export default class Nebularity {
         this.currentTarget = null;
         this.previousTarget = null;
         this.displayTarget = null;
+        
+        // Ping-Pong Buffers for zero-allocation rotation
+        this.bufferA = null;
+        this.bufferB = null;
+        this._activeBuffer = 'A'; // Which one is the NEW generation going into
+        
         this.transitionTime = 0;
         this.isTransitioning = false;
         
@@ -430,36 +436,40 @@ export default class Nebularity {
 
         const hash = this.hashCode(seed);
 
-        // Prepare for transition
-        if (this.currentTarget) {
-            // If we were already transitioning, clean up the 'previous'
-            if (this.previousTarget) this.previousTarget.dispose();
-            this.previousTarget = this.currentTarget;
-        }
-
-        const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(resolution, {
+        // --- Optimized Buffer Rotation (Ping-Pong) ---
+        // 1. Ensure all 3 targets exist and match resolution
+        const targetOptions = {
             format: THREE.RGBAFormat,
             type: THREE.HalfFloatType,
             generateMipmaps: false,
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter
-        });
-        
-        // Ensure displayTarget exists and matches resolution
-        if (!this.displayTarget || this.displayTarget.width !== resolution) {
+        };
+
+        if (!this.bufferA || this.bufferA.width !== resolution) {
+            if (this.bufferA) this.bufferA.dispose();
+            if (this.bufferB) this.bufferB.dispose();
             if (this.displayTarget) this.displayTarget.dispose();
-            this.displayTarget = new THREE.WebGLCubeRenderTarget(resolution, {
-                format: THREE.RGBAFormat,
-                type: THREE.HalfFloatType,
-                generateMipmaps: false,
-                minFilter: THREE.LinearFilter,
-                magFilter: THREE.LinearFilter
-            });
+            
+            this.bufferA = new THREE.WebGLCubeRenderTarget(resolution, targetOptions);
+            this.bufferB = new THREE.WebGLCubeRenderTarget(resolution, targetOptions);
+            this.displayTarget = new THREE.WebGLCubeRenderTarget(resolution, targetOptions);
+            
+            this.blendCubeCamera = new THREE.CubeCamera(0.1, 10, this.displayTarget);
         }
 
-        this.currentTarget = cubeRenderTarget;
+        // 2. Rotate buffers
+        this.previousTarget = this.currentTarget;
+        if (this._activeBuffer === 'A') {
+            this.currentTarget = this.bufferA;
+            this._activeBuffer = 'B';
+        } else {
+            this.currentTarget = this.bufferB;
+            this._activeBuffer = 'A';
+        }
+
+        const cubeRenderTarget = this.currentTarget;
         const cubeCamera = new THREE.CubeCamera(0.01, 2000, cubeRenderTarget);
-        this.blendCubeCamera = new THREE.CubeCamera(0.1, 10, this.displayTarget);
         this.scene.add(cubeCamera);
 
         // --- Setup Parameters ---
@@ -658,10 +668,8 @@ export default class Nebularity {
 
         if (progress >= 1.0) {
             this.isTransitioning = false;
-            if (this.previousTarget) {
-                this.previousTarget.dispose();
-                this.previousTarget = null;
-            }
+            // No need to dispose! Buffers are reused in the next generate() call.
+            this.previousTarget = null;
         }
     }
 
