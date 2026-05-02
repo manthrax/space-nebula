@@ -227,7 +227,8 @@
                     <label>Seed</label>
                     <div class="control-row">
                         <input type="text" id="seed" value="nebularity6">
-                        <button id="randomSeedBtn" class="btn-small" title="Randomize Seed">🎲</button>
+                        <button id="addSeedBtn" class="btn-small" title="Save Seed to List">+</button>
+                        <button id="randomSeedBtn" class="btn-small" title="Randomize Seed (Space)">🎲</button>
                     </div>
                 </div>
 
@@ -270,6 +271,7 @@
                         <button id="exportJpgBtn" style="flex: 1;">JPG (360°)</button>
                         <button id="exportExrBtn" style="flex: 1;">HDR (EXR)</button>
                     </div>
+                    <button id="exportSeedsBtn" style="width: 100%; margin-top: 0.5rem; background: rgba(255,255,255,0.05);">Export Seed List (JSON)</button>
                 </div>
 
                 <div id="status" class="status">Ready</div>
@@ -285,12 +287,20 @@
 
         // UI Elements
         const seedInput = document.getElementById('seed');
+        const addSeedBtn = document.getElementById('addSeedBtn');
+        const randomSeedBtn = document.getElementById('randomSeedBtn');
         const resSelect = document.getElementById('resolution');
         const generateBtn = document.getElementById('generateBtn');
         const exportJpgBtn = document.getElementById('exportJpgBtn');
         const exportExrBtn = document.getElementById('exportExrBtn');
+        const exportSeedsBtn = document.getElementById('exportSeedsBtn');
         const statusText = document.getElementById('status');
         const loadingOverlay = document.getElementById('loading');
+
+        // History & Curation State
+        let seedHistory = ['nebularity6'];
+        let historyIndex = 0;
+        let flaggedSeeds = new Set();
 
         // Three.js Setup
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('viewer'), antialias: true });
@@ -356,7 +366,17 @@
             const startTime = performance.now();
 
             try {
-                nebularity.morph(seedInput.value, {
+                const seed = seedInput.value;
+                
+                // Track history if this is a new seed we're jumping to (not from arrows)
+                if (seed !== seedHistory[historyIndex]) {
+                    // If we're not at the end, truncate future history
+                    seedHistory = seedHistory.slice(0, historyIndex + 1);
+                    seedHistory.push(seed);
+                    historyIndex = seedHistory.length - 1;
+                }
+
+                nebularity.morph(seed, {
                     resolution: parseInt(resSelect.value),
                     nebulae: document.getElementById('nebulae').checked,
                     stars: document.getElementById('stars').checked,
@@ -415,12 +435,61 @@
         exportJpgBtn.addEventListener('click', () => handleExport('jpg'));
         exportExrBtn.addEventListener('click', () => handleExport('exr'));
 
-        // Click on randomize button to generate a new seed
-        document.getElementById('randomSeedBtn').addEventListener('click', () => {
-            const randomSeed = Math.random().toString(36).substring(2, 7) + '-' + Math.random().toString(36).substring(2, 7);
-            seedInput.value = randomSeed;
+        // --- Event Listeners ---
+        randomSeedBtn.addEventListener('click', () => {
+            const newSeed = Math.random().toString(36).substring(7);
+            seedInput.value = newSeed;
             doGenerate();
         });
+
+        addSeedBtn.addEventListener('click', () => {
+            const currentSeed = seedInput.value;
+            flaggedSeeds.add(currentSeed);
+            statusText.innerText = `Seed "${currentSeed}" saved! (${flaggedSeeds.size} total)`;
+            setTimeout(() => statusText.innerText = "Ready", 2000);
+        });
+
+        exportSeedsBtn.addEventListener('click', () => {
+            if (flaggedSeeds.size === 0) {
+                alert("No seeds flagged yet! Click '+' to save some.");
+                return;
+            }
+            const data = JSON.stringify([...flaggedSeeds], null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'nebularity_seeds.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            // Ignore if typing in the seed input
+            if (document.activeElement === seedInput) return;
+
+            if (e.code === 'Space') {
+                e.preventDefault();
+                randomSeedBtn.click();
+            } else if (e.code === 'ArrowLeft') {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    seedInput.value = seedHistory[historyIndex];
+                    doGenerate();
+                }
+            } else if (e.code === 'ArrowRight') {
+                if (historyIndex < seedHistory.length - 1) {
+                    historyIndex++;
+                    seedInput.value = seedHistory[historyIndex];
+                    doGenerate();
+                } else {
+                    // Generate new random at the end of history
+                    randomSeedBtn.click();
+                }
+            }
+        });
+
+        generateBtn.addEventListener('click', doGenerate);
 
         // Auto-generate on parameter changes
         ['resolution', 'nebulae', 'stars', 'pointStars', 'sun'].forEach(id => {
