@@ -125,6 +125,16 @@
             justify-content: center;
         }
 
+        .btn-small.tagged {
+            background: rgba(255, 60, 60, 0.3);
+            border-color: rgba(255, 60, 60, 0.4);
+            color: #ff8888;
+        }
+
+        .btn-small.tagged:hover {
+            background: rgba(255, 60, 60, 0.5);
+        }
+
         input[type="text"],
         input[type="number"],
         select {
@@ -302,6 +312,19 @@
         let historyIndex = 0;
         let flaggedSeeds = new Set();
 
+        function updateAddBtnState() {
+            const currentSeed = seedInput.value;
+            if (flaggedSeeds.has(currentSeed)) {
+                addSeedBtn.innerHTML = "−";
+                addSeedBtn.classList.add('tagged');
+                addSeedBtn.title = "Remove Seed from List";
+            } else {
+                addSeedBtn.innerHTML = "+";
+                addSeedBtn.classList.remove('tagged');
+                addSeedBtn.title = "Save Seed to List";
+            }
+        }
+
         // Three.js Setup
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('viewer'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -376,6 +399,7 @@
                     historyIndex = seedHistory.length - 1;
                 }
 
+                updateAddBtnState();
                 nebularity.morph(seed, {
                     resolution: parseInt(resSelect.value),
                     nebulae: document.getElementById('nebulae').checked,
@@ -444,9 +468,15 @@
 
         addSeedBtn.addEventListener('click', () => {
             const currentSeed = seedInput.value;
-            flaggedSeeds.add(currentSeed);
-            statusText.innerText = `Seed "${currentSeed}" saved! (${flaggedSeeds.size} total)`;
-            setTimeout(() => statusText.innerText = "Ready", 2000);
+            if (flaggedSeeds.has(currentSeed)) {
+                flaggedSeeds.delete(currentSeed);
+                statusText.innerText = `Seed removed. (${flaggedSeeds.size} total)`;
+            } else {
+                flaggedSeeds.add(currentSeed);
+                statusText.innerText = `Seed saved! (${flaggedSeeds.size} total)`;
+            }
+            updateAddBtnState();
+            setTimeout(() => { if (statusText.innerText !== "Generating...") statusText.innerText = "Ready"; }, 2000);
         });
 
         exportSeedsBtn.addEventListener('click', () => {
@@ -490,6 +520,35 @@
         });
 
         generateBtn.addEventListener('click', doGenerate);
+
+        // --- Drag & Drop Sequence Support ---
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.json')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const seeds = JSON.parse(event.target.result);
+                        if (Array.isArray(seeds)) {
+                            seedHistory = seeds;
+                            historyIndex = 0;
+                            seedInput.value = seedHistory[0];
+                            statusText.innerText = `Loaded ${seeds.length} seeds!`;
+                            doGenerate();
+                        }
+                    } catch (err) {
+                        console.error("Failed to parse seed list", err);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
 
         // Auto-generate on parameter changes
         ['resolution', 'nebulae', 'stars', 'pointStars', 'sun'].forEach(id => {
