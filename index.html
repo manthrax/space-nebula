@@ -57,6 +57,48 @@
             pointer-events: auto;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.8);
             animation: fadeIn 0.5s ease-out;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel.collapsed {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+        }
+
+        .panel.collapsed > *:not(.toggle-btn) {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .toggle-btn {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 16px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(1.1);
+        }
+
+        .panel.collapsed .toggle-btn {
+            top: 8px;
+            left: 8px;
+            background: rgba(255, 255, 255, 0.5);
         }
 
         @keyframes fadeIn {
@@ -212,7 +254,7 @@
             pointer-events: none;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-itFEp9GT.js"></script>
+  <script type="module" crossorigin src="./assets/index-BQwmCmy-.js"></script>
 </head>
 
 <body>
@@ -225,7 +267,8 @@
     <canvas id="viewer"></canvas>
 
     <div class="ui-overlay">
-        <div class="panel">
+        <div class="panel" id="uiPanel">
+            <div class="toggle-btn" id="panelToggle" title="Toggle UI Panel"></div>
             <h1>Nebularity</h1>
             <div class="description">
                 Procedural 3D space generator. Original algorithm by <a href="https://github.com/wwwtyro"
