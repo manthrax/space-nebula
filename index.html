@@ -280,7 +280,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-        import NebulaGenerator from './NebulaGenerator.js';
+        import Nebularity from './Nebularity.js';
         import Exporter from './Exporter.js';
 
         // UI Elements
@@ -299,8 +299,9 @@
         renderer.toneMappingExposure = 1.0;
 
         // Generator (Now sharing the main renderer's context)
-        const generator = new NebulaGenerator(renderer);
+        const nebularity = new Nebularity(renderer);
         const exporter = new Exporter(renderer);
+        const clock = new THREE.Clock();
         let currentCubeTexture = null;
 
         const scene = new THREE.Scene();
@@ -355,16 +356,18 @@
             const startTime = performance.now();
 
             try {
-                currentCubeTexture = generator.generate(seedInput.value, {
+                nebularity.morph(seedInput.value, {
                     resolution: parseInt(resSelect.value),
                     nebulae: document.getElementById('nebulae').checked,
                     stars: document.getElementById('stars').checked,
                     pointStars: document.getElementById('pointStars').checked,
-                    sun: document.getElementById('sun').checked
+                    sun: document.getElementById('sun').checked,
+                    duration: 1.0 // Optional custom duration
                 });
 
-                scene.background = currentCubeTexture;
-                scene.environment = currentCubeTexture;
+                // Link to the stateful texture once
+                scene.background = nebularity.texture;
+                scene.environment = nebularity.texture;
                 console.log("Applied cubeTexture to background and environment");
 
                 const duration = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -381,7 +384,11 @@
         // Animation loop
         function animate() {
             requestAnimationFrame(animate);
-            controls.update();
+            
+            const delta = clock.getDelta();
+            nebularity.update(delta);
+
+            if (controls.enabled) controls.update();
             renderer.render(scene, camera);
         }
 
@@ -394,10 +401,10 @@
         generateBtn.addEventListener('click', doGenerate);
 
         async function handleExport(format) {
-            if (!currentCubeTexture) return;
+            if (!nebularity.texture) return;
             statusText.innerText = `Exporting ${format.toUpperCase()}...`;
             try {
-                await exporter.exportEquirect(currentCubeTexture, 4096, format);
+                await exporter.exportEquirect(nebularity.texture, 4096, format);
                 statusText.innerText = "Export complete";
             } catch (e) {
                 console.error(e);

@@ -10,26 +10,42 @@ This project is a modern refactor of the classic procedural nebula engine by **J
 
 ## Library Usage
 
-You can import this generator directly into any Three.js project via CDN or raw GitHub link.
+You can import **Nebularity** directly into any Three.js project via CDN.
 
-### 1. Import and Generate
+### 1. Simple One-Liner (Static)
+Perfect for quick background generation.
 ```javascript
 import * as THREE from 'three';
-import NebulaGenerator from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/NebulaGenerator.js';
+import Nebularity from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/Nebularity.js';
 
-// Setup your renderer...
-const renderer = new THREE.WebGLRenderer();
-
-// Generate a unique skybox in one line
-const nebulaTexture = NebulaGenerator.create(renderer, "my-seed-123", {
+// Generate a high-quality cubemap in one line
+const nebulaTexture = Nebularity.create(renderer, "my-seed-123", {
     resolution: 1024,
     stars: true,
     nebulae: true
 });
 
-// Apply to your scene
 scene.background = nebulaTexture;
-scene.environment = nebulaTexture;
+```
+
+### 2. Stateful Morphing (Advanced)
+Allows for smooth crossfades between different nebula states.
+```javascript
+import Nebularity from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/Nebularity.js';
+
+// 1. Initialize
+const nebula = new Nebularity(renderer);
+scene.background = nebula.texture;
+scene.environment = nebula.texture;
+
+// 2. Morph to a new state over 2 seconds
+nebula.morph("cosmic-voyage", { duration: 2.0 });
+
+// 3. Update in your loop
+function animate() {
+    nebula.update(clock.getDelta());
+    renderer.render(scene, camera);
+}
 ```
 
 ## Features

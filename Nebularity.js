@@ -34,10 +34,18 @@ class MersenneTwister {
     }
 }
 
-export default class NebulaGenerator {
+/**
+ * Nebularity: High-fidelity procedural 3D nebula generator for Three.js
+ */
+export default class Nebularity {
     constructor(renderer) {
         this.renderer = renderer;
         this.currentTarget = null;
+        this.previousTarget = null;
+        this.displayTarget = null;
+        this.transitionTime = 0;
+        this.isTransitioning = false;
+        
         this._tempVec = new THREE.Vector3();
         
         // Initialize scratch objects BEFORE initScene()
@@ -45,9 +53,42 @@ export default class NebulaGenerator {
         this.scratchQuat = new THREE.Quaternion();
         this.scratchV3 = new THREE.Vector3();
         this.scratchZ = new THREE.Vector3(0, 0, -1);
-
         this.initMaterials();
         this.initScene();
+        this.initBlender();
+    }
+
+    initBlender() {
+        this.blendMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                tPrev: { value: null },
+                tNext: { value: null },
+                uMix: { value: 0.0 }
+            },
+            vertexShader: `
+                varying vec3 vPos;
+                void main() {
+                    vPos = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform samplerCube tPrev;
+                uniform samplerCube tNext;
+                uniform float uMix;
+                varying vec3 vPos;
+                void main() {
+                    vec4 col1 = textureCube(tPrev, normalize(vPos));
+                    vec4 col2 = textureCube(tNext, normalize(vPos));
+                    gl_FragColor = mix(col1, col2, uMix);
+                }
+            `,
+            side: THREE.BackSide
+        });
+
+        this.blendScene = new THREE.Scene();
+        this.blendMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), this.blendMaterial);
+        this.blendScene.add(this.blendMesh);
     }
 
     getStarColor(rng) {
@@ -389,9 +430,11 @@ export default class NebulaGenerator {
 
         const hash = this.hashCode(seed);
 
-        // Dispose previous target to prevent memory leak
+        // Prepare for transition
         if (this.currentTarget) {
-            this.currentTarget.dispose();
+            // If we were already transitioning, clean up the 'previous'
+            if (this.previousTarget) this.previousTarget.dispose();
+            this.previousTarget = this.currentTarget;
         }
 
         const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(resolution, {
@@ -401,10 +444,22 @@ export default class NebulaGenerator {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter
         });
-        this.currentTarget = cubeRenderTarget;
+        
+        // Ensure displayTarget exists and matches resolution
+        if (!this.displayTarget || this.displayTarget.width !== resolution) {
+            if (this.displayTarget) this.displayTarget.dispose();
+            this.displayTarget = new THREE.WebGLCubeRenderTarget(resolution, {
+                format: THREE.RGBAFormat,
+                type: THREE.HalfFloatType,
+                generateMipmaps: false,
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter
+            });
+        }
 
-        // Near plane set to 0.01 to avoid any possible clipping of the generator box
+        this.currentTarget = cubeRenderTarget;
         const cubeCamera = new THREE.CubeCamera(0.01, 2000, cubeRenderTarget);
+        this.blendCubeCamera = new THREE.CubeCamera(0.1, 10, this.displayTarget);
         this.scene.add(cubeCamera);
 
         // --- Setup Parameters ---
@@ -550,15 +605,75 @@ export default class NebulaGenerator {
 
         this.scene.remove(cubeCamera);
 
-        return cubeRenderTarget.texture;
+        // Start transition
+        if (this.previousTarget) {
+            this.isTransitioning = true;
+            this.transitionTime = 0;
+            this.blendMaterial.uniforms.tPrev.value = this.previousTarget.texture;
+            this.blendMaterial.uniforms.tNext.value = this.currentTarget.texture;
+            this.blendMaterial.uniforms.uMix.value = 0.0;
+        } else {
+            // First run, just copy immediately to displayTarget
+            this.isTransitioning = true;
+            this.transitionTime = 1.0; // Force immediate end
+            this.blendMaterial.uniforms.tPrev.value = this.currentTarget.texture;
+            this.blendMaterial.uniforms.tNext.value = this.currentTarget.texture;
+            this.blendMaterial.uniforms.uMix.value = 1.0;
+        }
+
+        return this.displayTarget.texture;
     }
 
     /**
-     * Library Helper: Generates a nebula cubemap in a single call.
+     * Returns the currently active texture (blended if transitioning).
+     * Assign this once to scene.background or scene.environment.
+     */
+    get texture() {
+        return this.displayTarget ? this.displayTarget.texture : null;
+    }
+
+    /**
+     * Modern API: Morph smoothly to a new nebula state.
+     */
+    morph(seed, params = {}) {
+        const duration = params.duration || 1.0;
+        this.generate(seed, params);
+        // Overwrite the default 1s if custom duration provided
+        this._currentDuration = duration;
+    }
+
+    /**
+     * Updates the crossfade transition. Should be called every frame.
+     */
+    update(deltaTime) {
+        if (!this.isTransitioning) return;
+
+        this.transitionTime += deltaTime;
+        const duration = this._currentDuration || 1.0;
+        const progress = Math.min(this.transitionTime / duration, 1.0);
+        this.blendMaterial.uniforms.uMix.value = progress;
+
+        // Render the blend to displayTarget
+        this.blendCubeCamera.update(this.renderer, this.blendScene);
+
+        if (progress >= 1.0) {
+            this.isTransitioning = false;
+            if (this.previousTarget) {
+                this.previousTarget.dispose();
+                this.previousTarget = null;
+            }
+        }
+    }
+
+    /**
+     * Legacy/Helper: Generates a nebula cubemap in a single call.
      */
     static create(renderer, seed = "cosmic", params = {}) {
-        const gen = new NebulaGenerator(renderer);
-        return gen.generate(seed, params);
+        const gen = new Nebularity(renderer);
+        gen.generate(seed, params);
+        // Force immediate update for first frame
+        gen.update(1.0); 
+        return gen.texture;
     }
 
     // --- Helpers ---
