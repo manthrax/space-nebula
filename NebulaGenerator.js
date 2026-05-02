@@ -37,6 +37,14 @@ class MersenneTwister {
 export default class NebulaGenerator {
     constructor(renderer) {
         this.renderer = renderer;
+        this.currentTarget = null;
+        this._tempVec = new THREE.Vector3();
+        
+        // Initialize scratch objects BEFORE initScene()
+        this.scratchP1 = new THREE.Vector3();
+        this.scratchQuat = new THREE.Quaternion();
+        this.scratchV3 = new THREE.Vector3();
+        this.scratchZ = new THREE.Vector3(0, 0, -1);
 
         this.initMaterials();
         this.initScene();
@@ -352,17 +360,14 @@ export default class NebulaGenerator {
         const colors = new Float32Array(count * 18);
         const rngPointInit = new MersenneTwister(12345);
 
+        const tempPos = new THREE.Vector3();
         for (let i = 0; i < count; i++) {
-            const size = 0.05;
-            const pos = new THREE.Vector3().randomDirection();
-            
-            // Background point stars get subtle coloring too
+            tempPos.randomDirection();
             const starColor = this.getStarColor(rngPointInit);
             const brightness = Math.pow(rngPointInit.random(), 4.0);
             
-            const star = this.buildStarGeometry(size, pos, 128.0, starColor, brightness);
-            positions.set(star.position, i * 18);
-            colors.set(star.color, i * 18);
+            // Optimized: pass arrays and index directly
+            this.buildStarGeometry(0.05, tempPos, 128.0, starColor, brightness, positions, colors, i);
         }
 
         const pointStarsGeometry = new THREE.BufferGeometry();
@@ -383,6 +388,12 @@ export default class NebulaGenerator {
         } = params;
 
         const hash = this.hashCode(seed);
+
+        // Dispose previous target to prevent memory leak
+        if (this.currentTarget) {
+            this.currentTarget.dispose();
+        }
+
         const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(resolution, {
             format: THREE.RGBAFormat,
             type: THREE.HalfFloatType,
@@ -390,6 +401,7 @@ export default class NebulaGenerator {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter
         });
+        this.currentTarget = cubeRenderTarget;
 
         // Near plane set to 0.01 to avoid any possible clipping of the generator box
         const cubeCamera = new THREE.CubeCamera(0.01, 2000, cubeRenderTarget);
@@ -566,21 +578,32 @@ export default class NebulaGenerator {
         return [r * Math.cos(phi), y, r * Math.sin(phi)];
     }
 
-    buildStarGeometry(size, pos, dist, starColor, brightness) {
-        const color = [];
-        for (let i = 0; i < 6; i++) {
-            color.push(starColor.r * brightness, starColor.g * brightness, starColor.b * brightness);
-        }
-        const vertices = [
-            [-size, -size, 0], [size, -size, 0], [size, size, 0],
-            [-size, -size, 0], [size, size, 0], [-size, size, 0]
+    buildStarGeometry(size, pos, dist, starColor, brightness, targetPos, targetCol, index) {
+        const pIdx = index * 18;
+        const cIdx = index * 18;
+
+        // Face the point towards the center
+        this.scratchQuat.setFromUnitVectors(this.scratchZ, pos);
+
+        // Quad vertices (2 triangles)
+        const v = [
+            -size, -size, 0,  size, -size, 0,  size, size, 0,
+            -size, -size, 0,  size, size, 0, -size, size, 0
         ];
-        const position = [];
-        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), pos.clone().normalize());
-        for (const v of vertices) {
-            const rotV = new THREE.Vector3(...v).applyQuaternion(quat);
-            position.push(rotV.x + pos.x * dist, rotV.y + pos.y * dist, rotV.z + pos.z * dist);
+
+        for (let i = 0; i < 6; i++) {
+            // Transform vertex
+            this.scratchV3.set(v[i * 3], v[i * 3 + 1], v[i * 3 + 2]).applyQuaternion(this.scratchQuat);
+            
+            // Offset and write to buffer
+            targetPos[pIdx + i * 3] = this.scratchV3.x + pos.x * dist;
+            targetPos[pIdx + i * 3 + 1] = this.scratchV3.y + pos.y * dist;
+            targetPos[pIdx + i * 3 + 2] = this.scratchV3.z + pos.z * dist;
+
+            // Write color to buffer
+            targetCol[cIdx + i * 3] = starColor.r * brightness;
+            targetCol[cIdx + i * 3 + 1] = starColor.g * brightness;
+            targetCol[cIdx + i * 3 + 2] = starColor.b * brightness;
         }
-        return { position, color };
     }
 }

@@ -1,10 +1,10 @@
-# Space Nebula Generator (Modernized)
+# Nebularity
 
 A procedural 3D space nebula generator built with Three.js. 
 
 This project is a modern refactor of the classic procedural nebula engine by **Joshua Hook (@wwwtyro)**. We've converted the pure WebGL boilerplate, to native a Three.js implementation featuring HDR rendering, PBR environment support, and reactive UI.
 
-🚀 **[Live Demo (Placeholder)](https://manthrax.github.io/space-nebula/)**
+🚀 **[Live Demo/Explorer](https://manthrax.github.io/space-nebula/)**
 
 ![Nebula Vista](placeholder_screenshot.png)
 
