@@ -55,9 +55,15 @@ npm install
 npm run dev
 ```
 
-## Exporting (Planned)
-- **Equirectangular JPG**: Export 360-degree vistas for use in VR or traditional skyboxes.
-- **HDR (EXR)**: High-bit-depth export for professional VFX and lighting workflows.
+## Deployment
+To deploy the interactive demo to GitHub Pages:
 
-## License
+1. Ensure your code is pushed to a GitHub repository.
+2. Run the deployment command:
+```bash
+npm run deploy
+```
+This will build the project and push the `dist` folder to the `gh-pages` branch.
+
+## Library Usage
 Released under the **Unlicense** (Public Domain). Feel free to use, modify, and distribute for any purpose.
