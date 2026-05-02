@@ -261,6 +261,15 @@
                 </div>
 
                 <button id="generateBtn">Generate Vista</button>
+                
+                <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                    <label style="font-size: 0.7rem; color: #888; margin-bottom: 0.5rem; display: block;">Export Current Vista</label>
+                    <div class="control-row">
+                        <button id="exportJpgBtn" style="flex: 1;">JPG (360°)</button>
+                        <button id="exportExrBtn" style="flex: 1;">HDR (EXR)</button>
+                    </div>
+                </div>
+
                 <div id="status" class="status">Ready</div>
             </div>
         </div>
@@ -270,11 +279,14 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
         import NebulaGenerator from './NebulaGenerator.js';
+        import Exporter from './Exporter.js';
 
         // UI Elements
         const seedInput = document.getElementById('seed');
         const resSelect = document.getElementById('resolution');
         const generateBtn = document.getElementById('generateBtn');
+        const exportJpgBtn = document.getElementById('exportJpgBtn');
+        const exportExrBtn = document.getElementById('exportExrBtn');
         const statusText = document.getElementById('status');
         const loadingOverlay = document.getElementById('loading');
 
@@ -286,6 +298,8 @@
 
         // Generator (Now sharing the main renderer's context)
         const generator = new NebulaGenerator(renderer);
+        const exporter = new Exporter(renderer);
+        let currentCubeTexture = null;
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -364,7 +378,7 @@
             const startTime = performance.now();
 
             try {
-                const cubeTexture = generator.generate(seedInput.value, {
+                currentCubeTexture = generator.generate(seedInput.value, {
                     resolution: parseInt(resSelect.value),
                     nebulae: document.getElementById('nebulae').checked,
                     stars: document.getElementById('stars').checked,
@@ -372,8 +386,8 @@
                     sun: document.getElementById('sun').checked
                 });
 
-                scene.background = cubeTexture;
-                scene.environment = cubeTexture;
+                scene.background = currentCubeTexture;
+                scene.environment = currentCubeTexture;
                 console.log("Applied cubeTexture to background and environment");
 
                 const duration = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -401,6 +415,21 @@
         });
 
         generateBtn.addEventListener('click', doGenerate);
+
+        async function handleExport(format) {
+            if (!currentCubeTexture) return;
+            statusText.innerText = `Exporting ${format.toUpperCase()}...`;
+            try {
+                await exporter.exportEquirect(currentCubeTexture, 4096, format);
+                statusText.innerText = "Export complete";
+            } catch (e) {
+                console.error(e);
+                statusText.innerText = "Export failed";
+            }
+        }
+
+        exportJpgBtn.addEventListener('click', () => handleExport('jpg'));
+        exportExrBtn.addEventListener('click', () => handleExport('exr'));
 
         // Click on randomize button to generate a new seed
         document.getElementById('randomSeedBtn').addEventListener('click', () => {
