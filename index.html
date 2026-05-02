@@ -315,8 +315,6 @@
                     <label for="showTestObj">Test Object</label>
                 </div>
 
-                <button id="generateBtn">Generate Vista</button>
-
                 <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
                     <label style="font-size: 0.7rem; color: #888; margin-bottom: 0.5rem; display: block;">Export Current
                         Vista</label>
@@ -343,7 +341,6 @@
         const addSeedBtn = document.getElementById('addSeedBtn');
         const randomSeedBtn = document.getElementById('randomSeedBtn');
         const resSelect = document.getElementById('resolution');
-        const generateBtn = document.getElementById('generateBtn');
         const exportJpgBtn = document.getElementById('exportJpgBtn');
         const exportExrBtn = document.getElementById('exportExrBtn');
         const exportSeedsBtn = document.getElementById('exportSeedsBtn');
@@ -562,7 +559,7 @@
             }
         });
 
-        generateBtn.addEventListener('click', doGenerate);
+
 
         // --- UI Interactions ---
         const uiPanel = document.getElementById('uiPanel');
