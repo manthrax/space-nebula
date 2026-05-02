@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+//import * as THREE from 'three';
 
 /**
  * NebulaGenerator.js (Three.js Native)
@@ -38,34 +38,35 @@ class MersenneTwister {
  * Nebularity: High-fidelity procedural 3D nebula generator for Three.js
  */
 export default class Nebularity {
-    constructor(renderer) {
+    constructor(THREE, renderer) {
+        this.THREE = THREE;
         this.renderer = renderer;
         this.currentTarget = null;
         this.previousTarget = null;
         this.displayTarget = null;
-        
+
         // Ping-Pong Buffers for zero-allocation rotation
         this.bufferA = null;
         this.bufferB = null;
         this._activeBuffer = 'A'; // Which one is the NEW generation going into
-        
+
         this.transitionTime = 0;
         this.isTransitioning = false;
-        
-        this._tempVec = new THREE.Vector3();
-        
+
+        this._tempVec = new this.THREE.Vector3();
+
         // Initialize scratch objects BEFORE initScene()
-        this.scratchP1 = new THREE.Vector3();
-        this.scratchQuat = new THREE.Quaternion();
-        this.scratchV3 = new THREE.Vector3();
-        this.scratchZ = new THREE.Vector3(0, 0, -1);
+        this.scratchP1 = new this.THREE.Vector3();
+        this.scratchQuat = new this.THREE.Quaternion();
+        this.scratchV3 = new this.THREE.Vector3();
+        this.scratchZ = new this.THREE.Vector3(0, 0, -1);
         this.initMaterials();
         this.initScene();
         this.initBlender();
     }
 
     initBlender() {
-        this.blendMaterial = new THREE.ShaderMaterial({
+        this.blendMaterial = new this.THREE.ShaderMaterial({
             uniforms: {
                 tPrev: { value: null },
                 tNext: { value: null },
@@ -89,23 +90,23 @@ export default class Nebularity {
                     gl_FragColor = mix(col1, col2, uMix);
                 }
             `,
-            side: THREE.BackSide
+            side: this.THREE.BackSide
         });
 
-        this.blendScene = new THREE.Scene();
-        this.blendMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), this.blendMaterial);
+        this.blendScene = new this.THREE.Scene();
+        this.blendMesh = new this.THREE.Mesh(new this.THREE.BoxGeometry(2, 2, 2), this.blendMaterial);
         this.blendScene.add(this.blendMesh);
     }
 
     getStarColor(rng) {
         const r = rng.random();
         // Highly saturated colors to survive ACES Filmic desaturation
-        if (r < 0.05) return new THREE.Color(0.1, 0.4, 1.0).multiplyScalar(1.5);  // Deep Blue (O)
-        if (r < 0.15) return new THREE.Color(0.3, 0.6, 1.0).multiplyScalar(1.2);  // Electric Blue (B)
-        if (r < 0.25) return new THREE.Color(1.0, 1.0, 1.0);                      // Pure White (A/F)
-        if (r < 0.55) return new THREE.Color(1.0, 0.9, 0.4).multiplyScalar(1.1);   // Golden (G)
-        if (r < 0.85) return new THREE.Color(1.0, 0.5, 0.05).multiplyScalar(1.3);  // Vivid Orange (K)
-        return new THREE.Color(1.0, 0.2, 0.05).multiplyScalar(1.5);               // Vivid Red (M)
+        if (r < 0.05) return new this.THREE.Color(0.1, 0.4, 1.0).multiplyScalar(1.5);  // Deep Blue (O)
+        if (r < 0.15) return new this.THREE.Color(0.3, 0.6, 1.0).multiplyScalar(1.2);  // Electric Blue (B)
+        if (r < 0.25) return new this.THREE.Color(1.0, 1.0, 1.0);                      // Pure White (A/F)
+        if (r < 0.55) return new this.THREE.Color(1.0, 0.9, 0.4).multiplyScalar(1.1);   // Golden (G)
+        if (r < 0.85) return new this.THREE.Color(1.0, 0.5, 0.05).multiplyScalar(1.3);  // Vivid Orange (K)
+        return new this.THREE.Color(1.0, 0.2, 0.05).multiplyScalar(1.5);               // Vivid Red (M)
     }
 
     initMaterials() {
@@ -234,15 +235,15 @@ export default class Nebularity {
             }
         `;
 
-        this.nebulaMaterial = new THREE.ShaderMaterial({
-            side: THREE.BackSide,
+        this.nebulaMaterial = new this.THREE.ShaderMaterial({
+            side: this.THREE.BackSide,
             transparent: true,
-            blending: THREE.AdditiveBlending,
+            blending: this.THREE.AdditiveBlending,
             depthWrite: false,
             depthTest: false,
             uniforms: {
-                uColor: { value: new THREE.Color(1, 1, 1) },
-                uOffset: { value: new THREE.Vector3(0, 0, 0) },
+                uColor: { value: new this.THREE.Color(1, 1, 1) },
+                uOffset: { value: new this.THREE.Vector3(0, 0, 0) },
                 uScale: { value: 1.0 },
                 uIntensity: { value: 1.0 },
                 uFalloff: { value: 1.0 }
@@ -292,15 +293,15 @@ export default class Nebularity {
             `
         });
 
-        this.starMaterial = new THREE.ShaderMaterial({
-            side: THREE.BackSide,
+        this.starMaterial = new this.THREE.ShaderMaterial({
+            side: this.THREE.BackSide,
             transparent: true,
-            blending: THREE.AdditiveBlending,
+            blending: this.THREE.AdditiveBlending,
             depthWrite: false,
             depthTest: false,
             uniforms: {
-                uPosition: { value: new THREE.Vector3(0, 0, 0) },
-                uColor: { value: new THREE.Color(1, 1, 1) },
+                uPosition: { value: new this.THREE.Vector3(0, 0, 0) },
+                uColor: { value: new this.THREE.Color(1, 1, 1) },
                 uSize: { value: 1.0 },
                 uIntensity: { value: 1.0 },
                 uFalloff: { value: 1.0 }
@@ -333,15 +334,15 @@ export default class Nebularity {
             `
         });
 
-        this.sunMaterial = new THREE.ShaderMaterial({
-            side: THREE.BackSide,
+        this.sunMaterial = new this.THREE.ShaderMaterial({
+            side: this.THREE.BackSide,
             transparent: true,
-            blending: THREE.AdditiveBlending,
+            blending: this.THREE.AdditiveBlending,
             depthWrite: false,
             depthTest: false,
             uniforms: {
-                uPosition: { value: new THREE.Vector3(0, 0, 0) },
-                uColor: { value: new THREE.Color(1, 1, 1) },
+                uPosition: { value: new this.THREE.Vector3(0, 0, 0) },
+                uColor: { value: new this.THREE.Color(1, 1, 1) },
                 uSize: { value: 1.0 },
                 uIntensity: { value: 1.0 },
                 uFalloff: { value: 1.0 }
@@ -373,9 +374,9 @@ export default class Nebularity {
             `
         });
 
-        this.pointStarsMaterial = new THREE.ShaderMaterial({
+        this.pointStarsMaterial = new this.THREE.ShaderMaterial({
             transparent: true,
-            blending: THREE.AdditiveBlending,
+            blending: this.THREE.AdditiveBlending,
             depthWrite: false,
             depthTest: false,
             vertexShader: `
@@ -396,8 +397,8 @@ export default class Nebularity {
     }
 
     initScene() {
-        this.scene = new THREE.Scene();
-        this.boxMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2, 64, 64, 64), this.nebulaMaterial);
+        this.scene = new this.THREE.Scene();
+        this.boxMesh = new this.THREE.Mesh(new this.THREE.BoxGeometry(2, 2, 2, 64, 64, 64), this.nebulaMaterial);
         this.boxMesh.frustumCulled = false;
         this.scene.add(this.boxMesh);
 
@@ -407,20 +408,20 @@ export default class Nebularity {
         const colors = new Float32Array(count * 18);
         const rngPointInit = new MersenneTwister(12345);
 
-        const tempPos = new THREE.Vector3();
+        const tempPos = new this.THREE.Vector3();
         for (let i = 0; i < count; i++) {
             tempPos.randomDirection();
             const starColor = this.getStarColor(rngPointInit);
             const brightness = Math.pow(rngPointInit.random(), 4.0);
-            
+
             // Optimized: pass arrays and index directly
             this.buildStarGeometry(0.05, tempPos, 128.0, starColor, brightness, positions, colors, i);
         }
 
-        const pointStarsGeometry = new THREE.BufferGeometry();
-        pointStarsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        pointStarsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        this.pointStarsMesh = new THREE.Mesh(pointStarsGeometry, this.pointStarsMaterial);
+        const pointStarsGeometry = new this.THREE.BufferGeometry();
+        pointStarsGeometry.setAttribute('position', new this.THREE.BufferAttribute(positions, 3));
+        pointStarsGeometry.setAttribute('color', new this.THREE.BufferAttribute(colors, 3));
+        this.pointStarsMesh = new this.THREE.Mesh(pointStarsGeometry, this.pointStarsMaterial);
         this.pointStarsMesh.frustumCulled = false;
         this.scene.add(this.pointStarsMesh);
     }
@@ -439,23 +440,23 @@ export default class Nebularity {
         // --- Optimized Buffer Rotation (Ping-Pong) ---
         // 1. Ensure all 3 targets exist and match resolution
         const targetOptions = {
-            format: THREE.RGBAFormat,
-            type: THREE.HalfFloatType,
+            format: this.THREE.RGBAFormat,
+            type: this.THREE.HalfFloatType,
             generateMipmaps: false,
-            minFilter: THREE.LinearFilter,
-            magFilter: THREE.LinearFilter
+            minFilter: this.THREE.LinearFilter,
+            magFilter: this.THREE.LinearFilter
         };
 
         if (!this.bufferA || this.bufferA.width !== resolution) {
             if (this.bufferA) this.bufferA.dispose();
             if (this.bufferB) this.bufferB.dispose();
             if (this.displayTarget) this.displayTarget.dispose();
-            
-            this.bufferA = new THREE.WebGLCubeRenderTarget(resolution, targetOptions);
-            this.bufferB = new THREE.WebGLCubeRenderTarget(resolution, targetOptions);
-            this.displayTarget = new THREE.WebGLCubeRenderTarget(resolution, targetOptions);
-            
-            this.blendCubeCamera = new THREE.CubeCamera(0.1, 10, this.displayTarget);
+
+            this.bufferA = new this.THREE.WebGLCubeRenderTarget(resolution, targetOptions);
+            this.bufferB = new this.THREE.WebGLCubeRenderTarget(resolution, targetOptions);
+            this.displayTarget = new this.THREE.WebGLCubeRenderTarget(resolution, targetOptions);
+
+            this.blendCubeCamera = new this.THREE.CubeCamera(0.1, 10, this.displayTarget);
         }
 
         // 2. Rotate buffers
@@ -469,7 +470,7 @@ export default class Nebularity {
         }
 
         const cubeRenderTarget = this.currentTarget;
-        const cubeCamera = new THREE.CubeCamera(0.01, 2000, cubeRenderTarget);
+        const cubeCamera = new this.THREE.CubeCamera(0.01, 2000, cubeRenderTarget);
         this.scene.add(cubeCamera);
 
         // --- Setup Parameters ---
@@ -477,7 +478,7 @@ export default class Nebularity {
         const pStarRotations = [];
         if (pointStars) {
             while (true) {
-                const rot = new THREE.Euler(
+                const rot = new this.THREE.Euler(
                     rngPoint.random() * Math.PI * 2,
                     rngPoint.random() * Math.PI * 2,
                     rngPoint.random() * Math.PI * 2
@@ -492,9 +493,9 @@ export default class Nebularity {
         if (stars) {
             while (true) {
                 starParams.push({
-                    pos: new THREE.Vector3(...this.randomVec3(rngStar)),
+                    pos: new this.THREE.Vector3(...this.randomVec3(rngStar)),
                     color: this.getStarColor(rngStar),
-                    size: rngStar.random() * 0.5 + 0.1, 
+                    size: rngStar.random() * 0.5 + 0.1,
                     intensity: rngStar.random() * 2.9 + 0.1, // Much more brightness variation
                     falloff: rngStar.random() * 160000.0 + 40000.0 // 50% smaller (radius)
                 });
@@ -508,10 +509,10 @@ export default class Nebularity {
             while (true) {
                 nebulaParams.push({
                     scale: rngNebula.random() * 0.5 + 0.25,
-                    color: new THREE.Color(rngNebula.random(), rngNebula.random(), rngNebula.random()),
+                    color: new this.THREE.Color(rngNebula.random(), rngNebula.random(), rngNebula.random()),
                     intensity: rngNebula.random() * 0.2 + 0.9,
                     falloff: rngNebula.random() * 3.0 + 3.0,
-                    offset: new THREE.Vector3(rngNebula.random() * 2000 - 1000, rngNebula.random() * 2000 - 1000, rngNebula.random() * 2000 - 1000)
+                    offset: new this.THREE.Vector3(rngNebula.random() * 2000 - 1000, rngNebula.random() * 2000 - 1000, rngNebula.random() * 2000 - 1000)
                 });
                 if (rngNebula.random() < 0.5) break;
             }
@@ -521,7 +522,7 @@ export default class Nebularity {
         const sunParams = [];
         if (sun) {
             sunParams.push({
-                pos: new THREE.Vector3(...this.randomVec3(rngSun)),
+                pos: new this.THREE.Vector3(...this.randomVec3(rngSun)),
                 color: this.getStarColor(rngSun),
                 size: rngSun.random() * 0.0001 + 0.000025, // 50% smaller overall
                 intensity: rngSun.random() * 2.5 + 0.5,     // More brightness range
@@ -530,7 +531,7 @@ export default class Nebularity {
         }
 
         // --- Render Loop ---
-        const oldSize = new THREE.Vector2();
+        const oldSize = new this.THREE.Vector2();
         this.renderer.getSize(oldSize);
         this.renderer.setSize(resolution, resolution);
 
@@ -539,8 +540,8 @@ export default class Nebularity {
         const oldToneMapping = this.renderer.toneMapping;
 
         this.renderer.autoClear = false;
-        this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-        this.renderer.toneMapping = THREE.NoToneMapping;
+        this.renderer.outputColorSpace = this.THREE.LinearSRGBColorSpace;
+        this.renderer.toneMapping = this.THREE.NoToneMapping;
 
         // Hide everything first
         this.boxMesh.visible = false;
@@ -677,10 +678,10 @@ export default class Nebularity {
      * Legacy/Helper: Generates a nebula cubemap in a single call.
      */
     static create(renderer, seed = "cosmic", params = {}) {
-        const gen = new Nebularity(renderer);
+        const gen = new Nebularity(THREE, renderer);
         gen.generate(seed, params);
         // Force immediate update for first frame
-        gen.update(1.0); 
+        gen.update(1.0);
         return gen.texture;
     }
 
@@ -710,14 +711,14 @@ export default class Nebularity {
 
         // Quad vertices (2 triangles)
         const v = [
-            -size, -size, 0,  size, -size, 0,  size, size, 0,
-            -size, -size, 0,  size, size, 0, -size, size, 0
+            -size, -size, 0, size, -size, 0, size, size, 0,
+            -size, -size, 0, size, size, 0, -size, size, 0
         ];
 
         for (let i = 0; i < 6; i++) {
             // Transform vertex
             this.scratchV3.set(v[i * 3], v[i * 3 + 1], v[i * 3 + 2]).applyQuaternion(this.scratchQuat);
-            
+
             // Offset and write to buffer
             targetPos[pIdx + i * 3] = this.scratchV3.x + pos.x * dist;
             targetPos[pIdx + i * 3 + 1] = this.scratchV3.y + pos.y * dist;

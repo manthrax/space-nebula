@@ -6,7 +6,9 @@ This project is a modern refactor of the classic procedural nebula engine by **J
 
 🚀 **[Live Demo/Explorer](https://manthrax.github.io/space-nebula/)**
 
-![Nebula Vista](placeholder_screenshot.png)
+🚀 **[Minimal example](https://manthrax.github.io/space-nebula/example.html)**
+
+![Nebula Vista](screenshot.jpg)
 
 ## Library Usage
 
@@ -34,7 +36,7 @@ Allows for smooth crossfades between different nebula states.
 import Nebularity from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/Nebularity.js';
 
 // 1. Initialize
-const nebula = new Nebularity(renderer);
+const nebula = new Nebularity(THREE,renderer);
 scene.background = nebula.texture;
 scene.environment = nebula.texture;
 

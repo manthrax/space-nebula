@@ -64,7 +64,7 @@
         controls.update();
 
         // 1. Initialize Nebularity
-        const nebula = new Nebularity(renderer);
+        const nebula = new Nebularity(THREE, renderer);
         scene.background = nebula.texture;
         scene.environment = nebula.texture;
 
