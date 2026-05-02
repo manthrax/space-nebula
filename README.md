@@ -8,6 +8,30 @@ This project is a modern refactor of the classic procedural nebula engine by **J
 
 ![Nebula Vista](placeholder_screenshot.png)
 
+## Library Usage
+
+You can import this generator directly into any Three.js project via CDN or raw GitHub link.
+
+### 1. Import and Generate
+```javascript
+import * as THREE from 'three';
+import NebulaGenerator from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/NebulaGenerator.js';
+
+// Setup your renderer...
+const renderer = new THREE.WebGLRenderer();
+
+// Generate a unique skybox in one line
+const nebulaTexture = NebulaGenerator.create(renderer, "my-seed-123", {
+    resolution: 1024,
+    stars: true,
+    nebulae: true
+});
+
+// Apply to your scene
+scene.background = nebulaTexture;
+scene.environment = nebulaTexture;
+```
+
 ## Features
 - **Procedural 4D Noise**: Generates unique, infinitely varied cosmic clouds and dust patterns.
 - **Astronomical Realism**: Star colors follow the **Morgan-Keenan spectral classification** (OBAFGKM), ranging from hot blue-white to cool red-orange.

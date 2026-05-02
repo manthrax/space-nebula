@@ -541,6 +541,14 @@ export default class NebulaGenerator {
         return cubeRenderTarget.texture;
     }
 
+    /**
+     * Library Helper: Generates a nebula cubemap in a single call.
+     */
+    static create(renderer, seed = "cosmic", params = {}) {
+        const gen = new NebulaGenerator(renderer);
+        return gen.generate(seed, params);
+    }
+
     // --- Helpers ---
 
     hashCode(str) {
