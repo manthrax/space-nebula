@@ -374,7 +374,7 @@
         // Generator (Now sharing the main renderer's context)
         const nebularity = new Nebularity(renderer);
         const exporter = new Exporter(renderer);
-        const clock = new THREE.Clock();
+        const timer = new THREE.Timer();
         let currentCubeTexture = null;
 
         const scene = new THREE.Scene();
@@ -461,15 +461,15 @@
                 statusText.innerText = "Generation failed";
             }
 
-            generateBtn.disabled = false;
             loadingOverlay.classList.add('hidden');
         }
 
         // Animation loop
-        function animate() {
+        function animate(time) {
             requestAnimationFrame(animate);
             
-            const delta = clock.getDelta();
+            timer.update(time);
+            const delta = timer.getDelta();
             nebularity.update(delta);
 
             if (controls.enabled) controls.update();
@@ -481,8 +481,6 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        generateBtn.addEventListener('click', doGenerate);
 
         async function handleExport(format) {
             if (!nebularity.texture) return;
