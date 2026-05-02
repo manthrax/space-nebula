@@ -1,12 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nebula Library Example</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        canvas { display: block; }
+        body {
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+
         .info {
             position: absolute;
             top: 20px;
@@ -14,10 +23,11 @@
             color: white;
             font-family: sans-serif;
             pointer-events: none;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
         }
     </style>
 </head>
+
 <body>
     <div class="info">
         <h1>Nebula Library Test</h1>
@@ -37,7 +47,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-        
+
         // Importing the library directly from your GitHub!
         import NebulaGenerator from 'https://cdn.jsdelivr.net/gh/manthrax/space-nebula/NebulaGenerator.js';
 
@@ -55,7 +65,7 @@
 
         // 2. The "One-Liner" Library Call
         // This generates the cubemap on-the-fly based on the seed
-        const nebulaTexture = NebulaGenerator.create(renderer, "cosmic-voyage-" + Math.random(), {
+        const nebulaTexture = NebulaGenerator.create(renderer, "mzp0h-bcxjv", {
             resolution: 1024,
             stars: true,
             nebulae: true,
@@ -82,4 +92,5 @@
         });
     </script>
 </body>
+
 </html>
