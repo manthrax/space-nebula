@@ -2,7 +2,7 @@
   "name": "nebularity",
   "version": "1.0.0",
   "description": "Nebularity: A high-fidelity procedural 3D space nebula generator",
-  "main": "NebulaGenerator.js",
+  "main": "src/Nebularity.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
