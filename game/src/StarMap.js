@@ -12,20 +12,28 @@ export default class StarMap {
 
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
-        
+
         this.container = new THREE.Group();
         this.scene.add(this.container);
 
-        // Map Materials (Retro Tactical Palette)
-        this.nodeMat = new THREE.MeshBasicMaterial({ color: 0x224466, toneMapped: false, blending: THREE.AdditiveBlending }); // Dim Blue (Unvisited)
-        this.visitedMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, toneMapped: false, blending: THREE.AdditiveBlending }); // Amber (Explored)
-        this.currentMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, blending: THREE.AdditiveBlending }); // White (Current)
-        this.selectedMat = new THREE.MeshBasicMaterial({ color: 0x00ffaa, toneMapped: false, blending: THREE.AdditiveBlending }); // Lime (Selected/Path)
         this.lineMat = new THREE.LineBasicMaterial({ color: 0x224466, transparent: true, opacity: 0.5, toneMapped: false, blending: THREE.AdditiveBlending });
         this.pathMat = new THREE.LineBasicMaterial({ color: 0x00ffaa, transparent: true, opacity: 1.0, toneMapped: false, blending: THREE.AdditiveBlending });
 
         this.nodeGeo = new THREE.SphereGeometry(150, 8, 8);
-        this.nodes = []; // Array for raycasting
+
+        // Instanced Rendering for Performance
+        this.maxNodes = 2000;
+        this.instancedNodes = new THREE.InstancedMesh(
+            this.nodeGeo,
+            new THREE.MeshBasicMaterial({ toneMapped: false, blending: THREE.AdditiveBlending }),
+            this.maxNodes
+        );
+        this.instancedNodes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.instancedNodes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.maxNodes * 3), 3);
+        this.container.add(this.instancedNodes);
+
+        this.nodeSectors = []; // Map instance index back to sector data
+        this.currentNodeIndex = -1;
 
         // Interaction
         this.controls = new OrbitControls(this.camera, renderer.domElement);
@@ -42,28 +50,41 @@ export default class StarMap {
 
         // Dimming Background
         const dimGeo = new THREE.PlaneGeometry(1000, 1000);
-        const dimMat = new THREE.MeshBasicMaterial({ color: 0x00050a, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, toneMapped: false });
+        const dimMat = new THREE.MeshBasicMaterial({
+            color: 0x00050a,
+            transparent: true,
+            opacity: 0.85,
+            depthWrite: false,
+            depthTest: false,
+            toneMapped: false
+        });
         this.dimmer = new THREE.Mesh(dimGeo, dimMat);
         this.dimmer.renderOrder = -1;
-        this.scene.add(this.dimmer);
+        this.dimmerScene = new THREE.Scene()
+        this.dimmerScene.add(this.dimmer);
 
         this.container.renderOrder = 1;
+
+        // Scratch objects for matrix updates
+        this._dummy = new THREE.Object3D();
+        this._color = new THREE.Color();
 
         window.addEventListener('mousedown', (e) => this.onMouseDown(e));
     }
 
     onMouseDown(event) {
         if (!this.visible) return;
-        
+
         this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObjects(this.nodes);
+        const intersects = this.raycaster.intersectObject(this.instancedNodes);
 
         if (intersects.length > 0) {
-            const sector = intersects[0].object.userData.sector;
-            this.selectSector(sector);
+            const instanceId = intersects[0].instanceId;
+            const sector = this.nodeSectors[instanceId];
+            if (sector) this.selectSector(sector);
         }
     }
 
@@ -80,29 +101,58 @@ export default class StarMap {
             return;
         }
 
-        // Simple BFS for pathfinding in the lattice
-        const queue = [[this.currentSectorOrigin]];
-        const visited = new Set([this.currentSectorOrigin.id]);
+        // A* Pathfinding for more robust long-range navigation
+        const start = this.currentSectorOrigin;
+        const goal = this.selectedSector;
+        
+        const openSet = [start];
+        const cameFrom = new Map();
+        
+        const gScore = new Map(); // Cost from start to current node
+        gScore.set(start.id, 0);
+        
+        const fScore = new Map(); // Estimated total cost (gScore + heuristic)
+        fScore.set(start.id, start.pos.distanceTo(goal.pos));
 
-        while (queue.length > 0) {
-            const path = queue.shift();
-            const last = path[path.length - 1];
+        let iterations = 0;
+        const MAX_ITERATIONS = 5000;
 
-            if (last.id === this.selectedSector.id) {
+        while (openSet.length > 0 && iterations < MAX_ITERATIONS) {
+            iterations++;
+            
+            // Get node with lowest fScore
+            openSet.sort((a, b) => fScore.get(a.id) - fScore.get(b.id));
+            const current = openSet.shift();
+
+            if (current.id === goal.id) {
+                // Reconstruct path
+                const path = [current];
+                let temp = current;
+                while (cameFrom.has(temp.id)) {
+                    temp = cameFrom.get(temp.id);
+                    path.unshift(temp);
+                }
                 this.plannedPath = path;
                 return;
             }
 
-            const neighbors = this.universe.getNeighbors(last);
-            for (let n of neighbors) {
-                if (!visited.has(n.id)) {
-                    visited.add(n.id);
-                    queue.push([...path, n]);
+            const neighbors = this.universe.getNeighbors(current);
+            for (let neighbor of neighbors) {
+                const tentativeGScore = gScore.get(current.id) + current.pos.distanceTo(neighbor.pos);
+                
+                if (!gScore.has(neighbor.id) || tentativeGScore < gScore.get(neighbor.id)) {
+                    cameFrom.set(neighbor.id, current);
+                    gScore.set(neighbor.id, tentativeGScore);
+                    fScore.set(neighbor.id, tentativeGScore + neighbor.pos.distanceTo(goal.pos));
+                    
+                    if (!openSet.find(n => n.id === neighbor.id)) {
+                        openSet.push(neighbor);
+                    }
                 }
             }
-            
-            if (queue.length > 1000) break; // Limit search
         }
+
+        console.warn("A* Search failed to find path within limit or no path exists.");
         this.plannedPath = [];
     }
 
@@ -111,7 +161,7 @@ export default class StarMap {
         this.visible = true;
         this.controls.enabled = true;
         this.refresh(currentSector);
-        
+
         // Focus on current sector
         this.camera.position.copy(currentSector.pos).add(new THREE.Vector3(0, 5000, 10000));
         this.controls.target.copy(currentSector.pos);
@@ -129,47 +179,71 @@ export default class StarMap {
 
     refresh(currentSector) {
         this.currentSectorOrigin = currentSector;
-        while (this.container.children.length > 0) {
-            const child = this.container.children[0];
-            if (child.geometry) child.geometry.dispose();
+
+        // Clean up previous lines only (InstancedMesh stays)
+        const toRemove = [];
+        this.container.traverse(child => {
+            if (child.isLineSegments) toRemove.push(child);
+        });
+        toRemove.forEach(child => {
+            child.geometry.dispose();
             this.container.remove(child);
-        }
-        this.nodes = [];
+        });
+
+        this.nodeSectors = [];
+        this.currentNodeIndex = -1;
 
         const { ix, iy, iz } = currentSector.coords;
         const range = 5;
+        let nodeCount = 0;
 
         const linePositions = [];
         const pathLinePositions = [];
 
+        // Pre-fetch colors to avoid object creation in loop
+        const colors = {
+            node: new THREE.Color(0x224466),
+            visited: new THREE.Color(0xffaa00),
+            current: new THREE.Color(0xffffff),
+            selected: new THREE.Color(0x00ffaa)
+        };
+
         for (let x = ix - range; x <= ix + range; x++) {
             for (let y = iy - range; y <= iy + range; y++) {
                 for (let z = iz - range; z <= iz + range; z++) {
+                    if (nodeCount >= this.maxNodes) break;
+
                     const s = this.universe.getSector(x, y, z);
                     this.universe.generateLinks(s);
 
-                    // Determine node material
-                    let mat = this.nodeMat;
+                    // Determine node color
+                    let col = colors.node;
                     const isPartOfPath = this.plannedPath.some(p => p.id === s.id);
 
-                    if (s.id === currentSector.id) mat = this.currentMat;
-                    else if (isPartOfPath) mat = this.selectedMat;
-                    else if (this.universe.visitedSectors.has(s.id)) mat = this.visitedMat;
+                    if (s.id === currentSector.id) {
+                        col = colors.current;
+                        this.currentNodeIndex = nodeCount;
+                    }
+                    else if (isPartOfPath) col = colors.selected;
+                    else if (this.universe.visitedSectors.has(s.id)) col = colors.visited;
 
-                    const mesh = new THREE.Mesh(this.nodeGeo, mat);
-                    mesh.position.copy(s.pos);
-                    mesh.userData.sector = s;
-                    this.container.add(mesh);
-                    this.nodes.push(mesh);
+                    // Update Instance
+                    this._dummy.position.copy(s.pos);
+                    this._dummy.scale.set(1, 1, 1);
+                    this._dummy.updateMatrix();
+                    this.instancedNodes.setMatrixAt(nodeCount, this._dummy.matrix);
+                    this.instancedNodes.setColorAt(nodeCount, col);
+
+                    this.nodeSectors[nodeCount] = s;
+                    nodeCount++;
 
                     s.links.forEach(neighborId => {
                         const neighbor = this.universe.sectors.get(neighborId);
                         if (neighbor) {
-                            // Check if this link is part of the planned path
                             let isPath = false;
                             for (let i = 0; i < this.plannedPath.length - 1; i++) {
-                                if ((this.plannedPath[i].id === s.id && this.plannedPath[i+1].id === neighbor.id) ||
-                                    (this.plannedPath[i].id === neighbor.id && this.plannedPath[i+1].id === s.id)) {
+                                if ((this.plannedPath[i].id === s.id && this.plannedPath[i + 1].id === neighbor.id) ||
+                                    (this.plannedPath[i].id === neighbor.id && this.plannedPath[i + 1].id === s.id)) {
                                     isPath = true;
                                     break;
                                 }
@@ -187,6 +261,17 @@ export default class StarMap {
                 }
             }
         }
+
+        // Hide unused instances
+        this._dummy.scale.set(0, 0, 0);
+        this._dummy.updateMatrix();
+        for (let i = nodeCount; i < this.maxNodes; i++) {
+            this.instancedNodes.setMatrixAt(i, this._dummy.matrix);
+        }
+
+        this.instancedNodes.count = nodeCount;
+        this.instancedNodes.instanceMatrix.needsUpdate = true;
+        if (this.instancedNodes.instanceColor) this.instancedNodes.instanceColor.needsUpdate = true;
 
         if (linePositions.length > 0) {
             const lines = new THREE.LineSegments(
@@ -208,15 +293,31 @@ export default class StarMap {
     render(renderer) {
         if (!this.visible) return;
         renderer.clearDepth();
+        renderer.render(this.dimmerScene, this.camera);
         renderer.render(this.scene, this.camera);
     }
 
     update(delta) {
         if (!this.visible) return;
-        this.controls.update();
+        if (this.controls.enabled) {
+            this.controls.update();
+        }
 
-        // Keep dimmer in front of camera
+        // Pulse Current Node via Instance Matrix update
+        if (this.currentNodeIndex !== -1) {
+            const s = this.nodeSectors[this.currentNodeIndex];
+            if (s) {
+                const pulse = 1.0 + Math.sin(performance.now() * 0.005) * 0.2;
+                this._dummy.position.copy(s.pos);
+                this._dummy.scale.set(1.5 * pulse, 1.5 * pulse, 1.5 * pulse);
+                this._dummy.updateMatrix();
+                this.instancedNodes.setMatrixAt(this.currentNodeIndex, this._dummy.matrix);
+                this.instancedNodes.instanceMatrix.needsUpdate = true;
+            }
+        }
+
+        // Position dimmer
         this.dimmer.position.copy(this.camera.position).add(this.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(100));
-        this.dimmer.lookAt(this.camera.position);
+        this.dimmer.quaternion.copy(this.camera.quaternion);
     }
 }

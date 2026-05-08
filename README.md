@@ -4,11 +4,11 @@ A procedural 3D space nebula generator built with Three.js.
 
 This project is a modern refactor of the classic procedural nebula engine by **Joshua Hook (@wwwtyro)**. We've converted the pure WebGL boilerplate, to native a Three.js implementation featuring HDR rendering, PBR environment support, and reactive UI.
 
-🚀 **[Nebula Drifter Game](https://manthrax.github.io/space-nebula/game/)**
-
 🚀 **[Live Demo/Explorer](https://manthrax.github.io/space-nebula/)**
 
 🚀 **[Minimal example](https://manthrax.github.io/space-nebula/example.html)**
+
+🚀 **[Nebula Drifter Game](https://manthrax.github.io/space-nebula/game/)**
 
 ![Nebula Vista](screenshot.jpg)
 

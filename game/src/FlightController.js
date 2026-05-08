@@ -21,12 +21,45 @@ export default class FlightController {
 
         // Input tracking
         this.keys = {};
+        this.mouse = { x: 0, y: 0, isLocked: false };
+        this.mouseLookEnabled = false; // Optional mouse look
+
         window.addEventListener('keydown', (e) => this.keys[e.code] = true);
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
+        // Mouse Look
+        window.addEventListener('mousemove', (e) => {
+            if (this.mouse.isLocked) {
+                this.mouse.x = e.movementX;
+                this.mouse.y = e.movementY;
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            this.mouse.isLocked = document.pointerLockElement === document.body;
+        });
+
+        window.addEventListener('mousedown', (e) => {
+            // Only engage pointer lock if we clicked the main canvas
+            if (e.target.tagName !== 'CANVAS') return;
+
+            // Do NOT engage if UI is active
+            const overlay = document.getElementById('overlay');
+            if (overlay && !overlay.classList.contains('hidden')) return;
+
+            const market = document.getElementById('market-ui');
+            if (market && market.classList.contains('active')) return;
+
+            if (window.isStarMapVisible) return;
+
+            if (this.mouseLookEnabled && !this.mouse.isLocked && !this.autopilot) {
+                document.body.requestPointerLock();
+            }
+        });
+
         // Camera follow parameters
-        this.cameraOffset = new THREE.Vector3(0, 4, 12);
-        this.cameraLookOffset = new THREE.Vector3(0, 1, -20);
+        this.cameraOffset = new THREE.Vector3(0, 4, 14);
+        this.cameraLookOffset = new THREE.Vector3(0, 1.5, -30);
         this.currentCameraPos = new THREE.Vector3().copy(camera.position);
 
         // Effects
@@ -34,39 +67,55 @@ export default class FlightController {
         this.warpDuration = 2.0;
         this.baseFov = camera.fov;
 
+        this.cameraLocked = false;
+
         // Pre-allocated scratch vectors to avoid per-frame GC
         this._thrustScratch = new THREE.Vector3();
         this._rotScratch = new THREE.Vector3();
         this._quatScratch = new THREE.Quaternion();
         this._eulerScratch = new THREE.Euler();
-        
+
         // Persistent engine state (Throttle)
         this.throttle = new THREE.Vector3(); // x: horizontal, y: vertical, z: forward
 
         // Power System
         this.maxCharge = 100;
         this.charge = 100;
-        this.chargeRegen = 8.0; // Faster recovery
-        this.hyperThrustCost = 10.0; // Much slower depletion
+        this.chargeRegen = 10.0;
+        this.hyperThrustCost = 15.0;
         this.isHyperThrusting = false;
     }
 
     update(delta, state = {}) {
-        if (delta > 0.1) delta = 0.1; 
+        if (delta > 0.1) delta = 0.1;
 
         // 0. Energy Regeneration
         this.charge = Math.min(this.maxCharge, this.charge + this.chargeRegen * delta);
 
-        // 1. Gather Input & Update Throttle
-        const rampSpeed = 2.0; 
-        
-        // Forward/Back Throttle
-        const throttleSpeed = 0.5;
-        if (this.keys['Equal']) this.throttle.z -= throttleSpeed * delta;
-        if (this.keys['Minus']) this.throttle.z += throttleSpeed * delta;
+        // Forward/Back Throttle (Digital Percentage Mapping)
+        if (this.keys['Backquote']) this.throttle.z = 0;
+        if (this.keys['Digit1']) this.throttle.z = -0.1;
+        if (this.keys['Digit2']) this.throttle.z = -0.2;
+        if (this.keys['Digit3']) this.throttle.z = -0.3;
+        if (this.keys['Digit4']) this.throttle.z = -0.4;
+        if (this.keys['Digit5']) this.throttle.z = -0.5;
+        if (this.keys['Digit6']) this.throttle.z = -0.6;
+        if (this.keys['Digit7']) this.throttle.z = -0.7;
+        if (this.keys['Digit8']) this.throttle.z = -0.8;
+        if (this.keys['Digit9']) this.throttle.z = -0.9;
+        if (this.keys['Digit0']) this.throttle.z = -1.0;
+        if (this.keys['Minus']) this.throttle.z = 1.0; // Reverse thrust
+
+        // Braking (X - Utility)
+        if (this.keys['KeyX']) {
+            this.throttle.z = THREE.MathUtils.lerp(this.throttle.z, 0, delta * 5.0);
+            this.velocity.multiplyScalar(Math.pow(0.9, delta * 60));
+        }
         this.throttle.z = THREE.MathUtils.clamp(this.throttle.z, -1.0, 1.0);
 
-        // Vertical/Lateral Throttle
+        const rampSpeed = 2.0;
+
+        // Vertical/Lateral Strafe (Arrow Keys)
         let targetY = 0;
         if (this.keys['ArrowUp']) targetY += 1;
         if (this.keys['ArrowDown']) targetY -= 1;
@@ -77,10 +126,23 @@ export default class FlightController {
         if (this.keys['ArrowRight']) targetX += 1;
         this.throttle.x = THREE.MathUtils.lerp(this.throttle.x, targetX, delta * rampSpeed);
 
-
-        // Hyperthrust (Spacebar)
-        let manualHyper = this.keys['Space'] && this.charge > 5;
-        this.isHyperThrusting = manualHyper;
+        // Hyperthrust (Space - Original control)
+        const spaceHeld = this.keys['Space'] && this.charge > 5;
+        if (spaceHeld) {
+            if (!this._wasManualHyper) {
+                this._preHyperThrottleZ = this.throttle.z;
+                this._wasManualHyper = true;
+            }
+            this.isHyperThrusting = true;
+            this.throttle.z = -1.0;
+        } else if (this._wasManualHyper) {
+            this.isHyperThrusting = false;
+            this.throttle.z = this._preHyperThrottleZ;
+            this._wasManualHyper = false;
+        } else {
+            // Autopilot or other sources might set isHyperThrusting
+            // so we don't force it to false here if not manual
+        }
 
         // --- Autopilot Logic ---
         this._rotScratch.set(0, 0, 0);
@@ -89,39 +151,58 @@ export default class FlightController {
             const dist = toTarget.length();
             const dir = toTarget.normalize();
 
-            // 1. Orient to target (Slerp) - Match player's turn speed feel
             const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
-            this.ship.quaternion.slerp(targetQuat, delta * 1.2); 
+            this.ship.quaternion.slerp(targetQuat, delta * 1.5);
 
-            // 2. Automated Thrust - Neutralize lateral/vertical
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.ship.quaternion);
+            const alignment = Math.max(0, forward.dot(dir)); // 0 to 1
+
             this.throttle.x = THREE.MathUtils.lerp(this.throttle.x, 0, delta * 2);
             this.throttle.y = THREE.MathUtils.lerp(this.throttle.y, 0, delta * 2);
 
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.ship.quaternion);
-            const alignment = forward.dot(dir);
-            if (alignment > 0.8) {
-                this.throttle.z = -1.0;
-                // Hyperthrust check
-                if (dist > 500 && this.charge > 10) {
+            if (dist < 3000) {
+                // Precision approach: Maintain speed but avoid orbiting
+                this.throttle.z = -1.0 * alignment;
+
+                // Keep hyperthrust active if well aligned for warp points
+                if (alignment > 0.99 && this.charge > 10) {
                     this.isHyperThrusting = true;
+                } else {
+                    this.isHyperThrusting = false;
                 }
             } else {
-                this.throttle.z = -0.3;
-                this.isHyperThrusting = false;
+                // High speed cruise
+                this.throttle.z = -1.0 * Math.pow(alignment, 2.0);
+                if (this.charge > 20 && alignment > 0.98) {
+                    this.isHyperThrusting = true;
+                } else {
+                    this.isHyperThrusting = false;
+                }
             }
 
-            // Manual Override (Break Autopilot)
-            if (this.keys['KeyW'] || this.keys['KeyS'] || this.keys['KeyA'] || this.keys['KeyD'] || this.keys['KeyQ'] || this.keys['KeyE']) {
+            // Manual Break
+            if (this.keys['KeyW'] || this.keys['KeyS'] || this.keys['KeyA'] || this.keys['KeyD']) {
                 this.autopilot = false;
+                this.cameraLocked = false;
             }
         } else {
-            // Manual Rotation Input
-            if (this.keys['KeyS']) this._rotScratch.x += 1; 
-            if (this.keys['KeyW']) this._rotScratch.x -= 1; 
-            if (this.keys['KeyA']) this._rotScratch.y += 1; 
-            if (this.keys['KeyD']) this._rotScratch.y -= 1; 
-            if (this.keys['KeyQ']) this._rotScratch.z += 1; 
-            if (this.keys['KeyE']) this._rotScratch.z -= 1; 
+            // Manual Rotation Input (Keyboard Original)
+            if (this.keys['KeyW']) this._rotScratch.x -= 1.5;
+            if (this.keys['KeyS']) this._rotScratch.x += 1.5;
+            if (this.keys['KeyA']) this._rotScratch.y += 1.5;
+            if (this.keys['KeyD']) this._rotScratch.y -= 1.5;
+
+            // Optional Mouse Look
+            const mouseSensitivity = 0.002;
+            if (this.mouseLookEnabled && this.mouse.isLocked) {
+                this._rotScratch.x += -this.mouse.y * mouseSensitivity * 50;
+                this._rotScratch.y += -this.mouse.x * mouseSensitivity * 50;
+                this.mouse.x = 0;
+                this.mouse.y = 0;
+            }
+
+            if (this.keys['KeyQ']) this._rotScratch.z += 1.5;
+            if (this.keys['KeyE']) this._rotScratch.z -= 1.5;
         }
 
         if (this.isHyperThrusting) {
@@ -130,7 +211,7 @@ export default class FlightController {
 
         // 2. Finalize Input & Apply Forces
         this.thrustInput = Math.min(this.throttle.length(), 1.0);
-        
+
         if (this.throttle.lengthSq() > 0.001) {
             const multiplier = this.isHyperThrusting ? 10.0 : 1.0;
             this._thrustScratch.copy(this.throttle).normalize();
@@ -147,7 +228,7 @@ export default class FlightController {
         if (state.nearestPlanetDist < state.atmosphereThreshold && state.nearestPlanetDir) {
             const targetNormal = state.nearestPlanetDir.clone().negate().normalize();
             const shipUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.ship.quaternion);
-            
+
             // Create a torque to align ship UP with planet normal
             const alignmentTorque = new THREE.Vector3().crossVectors(shipUp, targetNormal);
             const intensity = 1.0 - (state.nearestPlanetDist / state.atmosphereThreshold);
@@ -170,19 +251,26 @@ export default class FlightController {
         this.velocity.multiplyScalar(dragFactor);
         this.rotationVelocity.multiplyScalar(angularDragFactor);
 
-        // 6. Camera Follow
-        this._thrustScratch.copy(this.cameraOffset).applyQuaternion(this.ship.quaternion);
-        this._rotScratch.copy(this.ship.position).add(this._thrustScratch);
-        this.camera.position.lerp(this._rotScratch, 0.1);
+    }
 
-        this._thrustScratch.copy(this.cameraLookOffset).applyQuaternion(this.ship.quaternion).add(this.ship.position);
-        this._rotScratch.set(0, 1, 0).applyQuaternion(this.ship.quaternion);
-        this.camera.up.copy(this._rotScratch);
-        this.camera.lookAt(this._thrustScratch);
+    updateCamera(delta) {
+        // 1. Camera Follow (Flight Mode)
+        if (!this.cameraLocked) {
+            const lerpFactor = 1.;//1.0 - Math.pow(0.001, delta); // Frame-rate independent lerp
 
-        // 7. Effects
+            this._thrustScratch.copy(this.cameraOffset).applyQuaternion(this.ship.quaternion);
+            this._rotScratch.copy(this.ship.position).add(this._thrustScratch);
+            this.camera.position.lerp(this._rotScratch, lerpFactor);
+
+            this._thrustScratch.copy(this.cameraLookOffset).applyQuaternion(this.ship.quaternion).add(this.ship.position);
+            this._rotScratch.set(0, 1, 0).applyQuaternion(this.ship.quaternion);
+            this.camera.up.copy(this._rotScratch);
+            this.camera.lookAt(this._thrustScratch);
+        }
+
+        // 2. FOV and Warp Effects
         const speedVal = this.velocity.length();
-        const speedFovOffset = Math.min(speedVal * 0.01, 10); // More subtle stretch
+        const speedFovOffset = Math.min(speedVal * 0.01, 10);
         const targetFov = this.baseFov + speedFovOffset + (this.isHyperThrusting ? 5 : 0);
 
         if (this.warpTime > 0) {

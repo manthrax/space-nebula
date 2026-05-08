@@ -2,14 +2,14 @@ import * as THREE from 'three';
 
 /**
  * UniverseManager: Handles the procedural generation of the galactic lattice.
- * Each sector is a perturbed point in a 3D grid.
+ * Optimized for organic, non-grid layouts using Prim's-inspired connectivity.
  */
 export default class UniverseManager {
-    constructor(globalSeed = "nebula-drift-v1") {
+    constructor(globalSeed = "nebula-drift-v2") {
         this.globalSeed = globalSeed;
         this.sectors = new Map();
         this.visitedSectors = new Set();
-        this.spacing = 10000; // Distance between lattice points in "Star Map Units"
+        this.spacing = 10000;
     }
 
     /**
@@ -22,20 +22,30 @@ export default class UniverseManager {
         const seedStr = `${this.globalSeed}-${key}`;
         const rng = this._getRNG(seedStr);
 
-        // Perturb the position within the cell
+        // Heavy perturbation for a more "randomized" look
+        const perturbation = 0.9;
         const pos = new THREE.Vector3(
-            (ix + (rng() - 0.5) * 0.8) * this.spacing,
-            (iy + (rng() - 0.5) * 0.8) * this.spacing,
-            (iz + (rng() - 0.5) * 0.8) * this.spacing
+            (ix + (rng() - 0.5) * perturbation) * this.spacing,
+            (iy + (rng() - 0.5) * perturbation) * this.spacing,
+            (iz + (rng() - 0.5) * perturbation) * this.spacing
         );
+
+        const lums = ["High", "Medium", "Low", "Faint"];
+        const stabs = ["Stable", "Unstable", "Highly Volatile", "Chaotic"];
+        const res = ["Abundant", "Standard", "Scarce", "Rich"];
 
         const sector = {
             id: key,
             coords: { ix, iy, iz },
             pos: pos,
             seed: Math.floor(rng() * 0xFFFFFF).toString(16),
-            name: "UNEXPLORED", // Will be filled by NameGenerator when visited
-            links: [] // Connections to neighboring sectors
+            name: "UNEXPLORED",
+            links: [],
+            attributes: {
+                luminosity: lums[Math.floor(rng() * lums.length)],
+                stability: stabs[Math.floor(rng() * stabs.length)],
+                resources: res[Math.floor(rng() * res.length)]
+            }
         };
 
         this.sectors.set(key, sector);
@@ -43,31 +53,66 @@ export default class UniverseManager {
     }
 
     /**
-     * Generate links between a sector and its immediate neighbors
+     * Generate links using a localized Prim's / MST approach.
+     * Guarantees global connectivity by ensuring a "backbone" link 
+     * while maintaining an organic randomized layout.
      */
     generateLinks(sector) {
-        if (sector.links.length > 0) return;
+        if (sector.linksGenerated) return;
+        sector.linksGenerated = true;
 
         const { ix, iy, iz } = sector.coords;
-        // Check 6 cardinal neighbors
-        const neighbors = [
-            [1, 0, 0], [-1, 0, 0],
-            [0, 1, 0], [0, -1, 0],
-            [0, 0, 1], [0, 0, -1]
-        ];
+        const allCandidates = [];
 
-        neighbors.forEach(([dx, dy, dz]) => {
-            // 70% chance of a link existing
-            const rng = this._getRNG(`${this.globalSeed}-link-${ix},${iy},${iz}-${dx},${dy},${dz}`);
-            if (rng() < 0.7) {
-                const neighbor = this.getSector(ix + dx, iy + dy, iz + dz);
-                sector.links.push(neighbor.id);
-                // Bi-directional link
-                if (!neighbor.links.includes(sector.id)) {
-                    neighbor.links.push(sector.id);
+        // Check a 3x3x3 neighborhood
+        for (let x = -1; x <= 1; x++) {
+            for (let y = -1; y <= 1; y++) {
+                for (let z = -1; z <= 1; z++) {
+                    if (x === 0 && y === 0 && z === 0) continue;
+                    allCandidates.push(this.getSector(ix + x, iy + y, iz + z));
                 }
             }
-        });
+        }
+
+        // Sort all candidates by distance
+        allCandidates.sort((a, b) => sector.pos.distanceTo(a.pos) - sector.pos.distanceTo(b.pos));
+
+        // 1. Primary Organic Links (Nearest neighbors)
+        const rng = this._getRNG(`${this.globalSeed}-links-${sector.id}`);
+        // Ensure every star at least tries to initiate 1-2 links of its own
+        const primaryCount = rng() > 0.4 ? 2 : 1;
+
+        for (let i = 0; i < primaryCount; i++) {
+            this._addLink(sector, allCandidates[i]);
+        }
+
+        // 2. Connectivity Backbone
+        // Every star ensures it has a link toward a "forward" cell.
+        const backboneCandidates = allCandidates.filter(c =>
+            (c.coords.ix > ix) ||
+            (c.coords.ix === ix && c.coords.iy > iy) ||
+            (c.coords.ix === ix && c.coords.iy === iy && c.coords.iz > iz)
+        );
+
+        if (backboneCandidates.length > 0) {
+            this._addLink(sector, backboneCandidates[0]);
+        }
+
+        // 3. Optional "Flavor" loops for more paths
+        if (rng() < 0.3) {
+            this._addLink(sector, allCandidates[Math.min(3, allCandidates.length - 1)]);
+        }
+
+        // 4. Safety Backbone: Guarantee at least one link exists
+        if (sector.links.length === 0 && allCandidates.length > 0) {
+            this._addLink(sector, allCandidates[0]);
+        }
+    }
+
+    _addLink(s1, s2) {
+        if (!s1 || !s2) return;
+        if (!s1.links.includes(s2.id)) s1.links.push(s2.id);
+        if (!s2.links.includes(s1.id)) s2.links.push(s1.id);
     }
 
     getNeighbors(sector) {

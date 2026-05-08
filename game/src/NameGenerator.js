@@ -4,15 +4,15 @@
 export default class NameGenerator {
     constructor() {
         this.prefixes = [
-            "Acheron", "Boreas", "Calyx", "Dread", "Echelon", "Flux", "Golgotha", "Hades", 
-            "Icarus", "Junction", "Krios", "Lethe", "Mantle", "Node", "Obsidian", "Phyx",
-            "Quasar", "Relay", "Styx", "Tensor", "Umbra", "Vector", "Warp", "Xeno"
+            "Acheron", "Boreas", "Calyx", "Echelon", "Flux", "Golgotha", "Hades",
+            "Krios", "Lethe", "Mantle", "Node", "Obsidian", "Phyx",
+            "Quasar", "Relay", "Styx", "Tensor", "Umbra", "Warp", "Xeno"
         ];
-        
+
         this.roots = [
-            "Anomalon", "Bastion", "Crateris", "Desolation", "Endymion", "Foundry", "Gauntlet", 
-            "Helios", "Ironclad", "Jericho", "Kyber", "Labyrinth", "Monolith", "Nemesis",
-            "Obelisk", "Pillar", "Ragnarok", "Shatter", "Terminal", "Underworld", "Vortex"
+            "Anomalon", "Bastion", "Crateris", "Desolation", "Endymion", "Foundry", "Gauntlet",
+            "Helios", "Ironclad", "Kyber", "Labyrinth", "Monolith", "Nemesis",
+            "Obelisk", "Pillar", "Ragnarok", "Shatter", "Terminal", "Underworld"
         ];
 
         this.suffixes = [
@@ -40,17 +40,17 @@ export default class NameGenerator {
         const p = this.prefixes[Math.floor(rng() * this.prefixes.length)];
         const r = this.roots[Math.floor(rng() * this.roots.length)];
         const num = Math.floor(rng() * 999);
-        
+
         const patterns = [
             `${p}-${num} ${r}`,
             `${r} ${p}`,
             `${p} ${r} Cluster`,
             `Sector ${num}-${p}`
         ];
-        
+
         return patterns[Math.floor(rng() * patterns.patterns)]; // Wait, fix patterns.length
     }
-    
+
     // Actually, let's make it more robust
     getName(seed, type = 'sector') {
         const rng = this._getRNG(seed);

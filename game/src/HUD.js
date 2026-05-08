@@ -14,91 +14,185 @@ export default class HUD {
         this.container.id = 'hud-container';
         this.container.innerHTML = `
             <style>
-                #hud-container {
+                #hud-root {
                     position: absolute;
                     top: 0; left: 0; width: 100%; height: 100%;
                     pointer-events: none;
-                    font-family: 'Courier New', Courier, monospace;
-                    color: #88ccff; /* Muted Light Blue */
-                    text-shadow: 0 0 5px rgba(136, 204, 255, 0.7);
+                    font-family: 'JetBrains Mono', 'Courier New', monospace;
+                    color: #88ccff;
                     overflow: hidden;
+                    user-select: none;
+                    text-shadow: 0 0 5px rgba(136, 204, 255, 0.4);
                 }
-                .crt-overlay {
+
+                #hud-root::before {
+                    content: " ";
+                    display: block;
                     position: absolute;
-                    top: 0; left: 0; width: 100%; height: 100%;
-                    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-                                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                    background-size: 100% 4px, 3px 100%;
+                    top: 0; left: 0; bottom: 0; right: 0;
+                    background: 
+                        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.05), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.05));
                     z-index: 100;
-                    opacity: 0.15;
+                    background-size: 100% 3px, 4px 100%;
                     pointer-events: none;
+                    opacity: 0.4;
                 }
+
                 .readout {
                     position: absolute;
-                    padding: 10px;
-                    background: none;
-                    border: none;
-                    /* Strong drop shadow for readability against bright nebulae */
-                    text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.9), 0 0 5px rgba(136, 204, 255, 0.3);
+                    padding: 12px;
+                    background: rgba(0, 20, 30, 0.15);
+                    border: 1px solid rgba(136, 204, 255, 0.1);
+                    transition: all 0.3s ease;
                 }
-                #top-left { top: 20px; left: 20px; width: 250px; }
-                #top-right { top: 20px; right: 20px; text-align: right; }
-                #bottom-left { bottom: 20px; left: 20px; font-size: 0.8rem; }
-                #bottom-right { bottom: 20px; right: 20px; width: 300px; height: 120px; }
+
+                .readout-left { border-left: 2px solid rgba(136, 204, 255, 0.5); }
+                .readout-right { border-right: 2px solid rgba(136, 204, 255, 0.5); }
+
+                .readout-header {
+                    font-family: 'Outfit', sans-serif;
+                    font-size: 0.6rem;
+                    letter-spacing: 3px;
+                    color: #88ccff;
+                    margin-bottom: 10px;
+                    text-transform: uppercase;
+                    opacity: 0.7;
+                    border-bottom: 1px solid rgba(136, 204, 255, 0.1);
+                    padding-bottom: 4px;
+                }
+
+                #top-left { top: 30px; left: 30px; width: 300px; }
+                #top-right { top: 30px; right: 30px; text-align: right; width: 300px; }
+                #bottom-left { bottom: 30px; left: 30px; width: 320px; }
+                #bottom-right { bottom: 30px; right: 30px; width: 320px; }
+                #economy-panel { top: 450px; right: 30px; width: 240px; }
                 
-                .scanline {
-                    width: 100%;
-                    height: 100px;
-                    background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(136, 204, 255, 0.05) 50%, rgba(0,0,0,0) 100%);
-                    position: absolute;
-                    top: -100px;
-                    animation: scanline 8s linear infinite;
+                .stat-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 6px;
                 }
-                @keyframes scanline {
-                    0% { top: -100px; }
-                    100% { top: 100%; }
+
+                .stat-label { opacity: 0.5; font-size: 0.7rem; font-weight: 300; }
+                .stat-value { 
+                    font-weight: 400; 
+                    color: #fff; 
+                    font-variant-numeric: tabular-nums;
                 }
-                .glitch { animation: glitch 0.2s infinite; }
-                @keyframes glitch {
-                    0% { transform: translate(0); }
-                    20% { transform: translate(-2px, 2px); }
-                    40% { transform: translate(-2px, -2px); }
-                    60% { transform: translate(2px, 2px); }
-                    80% { transform: translate(2px, -2px); }
-                    100% { transform: translate(0); }
+
+                .bar-container { 
+                    width: 100%; 
+                    height: 2px; 
+                    background: rgba(136, 204, 255, 0.1); 
+                    margin: 6px 0 10px 0; 
+                    position: relative;
                 }
-                .bar-container { width: 100%; height: 6px; background: rgba(136, 204, 255, 0.1); margin-top: 5px; position: relative; }
-                .bar-fill { height: 100%; background: #88ccff; width: 50%; transition: width 0.1s; box-shadow: 0 0 10px rgba(136, 204, 255, 0.5); }
+                .bar-fill { 
+                    height: 100%; 
+                    background: #88ccff; 
+                    width: 0%; 
+                    transition: width 0.3s ease; 
+                }
+
+                #messages {
+                    height: 90px;
+                    font-size: 0.7rem;
+                    line-height: 1.5;
+                    display: flex;
+                    flex-direction: column-reverse;
+                    gap: 6px;
+                    overflow: hidden;
+                    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+                    mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+                }
+                .msg-entry {
+                    border-left: 2px solid #88ccff;
+                    padding-left: 10px;
+                    animation: msgSlideIn 0.3s ease-out;
+                    color: #88ccff;
+                }
+                @keyframes msgSlideIn {
+                    from { transform: translateX(-10px); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+
+                .glitch-flash {
+                    animation: glitchFlash 0.3s step-end;
+                }
+                @keyframes glitchFlash {
+                    0% { background: rgba(0, 255, 170, 0.1); }
+                    50% { background: rgba(0, 255, 170, 0.0); }
+                    100% { background: rgba(0, 255, 170, 0.0); }
+                }
+                .coord-grid {
+                    display: flex;
+                    gap: 4px;
+                    font-size: 0.85rem;
+                }
+                .coord-seg {
+                    width: 80px;
+                    text-align: right;
+                    color: #fff;
+                    white-space: nowrap;
+                    font-variant-numeric: tabular-nums;
+                }
             </style>
-            <div class="crt-overlay"></div>
-            <div class="scanline"></div>
             
-            <div id="top-left" class="readout">
-                <div>SYSTEM STATUS: ONLINE</div>
-                <div style="font-size: 0.7rem; opacity: 0.7; margin-bottom: 10px;">CORE OS v4.2 / NAV-INTERACTION</div>
-                <div>THRUST: <span id="thrust-val">0</span>%</div>
+            <div id="top-left" class="readout readout-left">
+                <div class="readout-header">Ship Systems // Propulsion</div>
+                <div class="stat-row">
+                    <span class="stat-label">THRUST OUTPUT</span>
+                    <span class="stat-value"><span id="thrust-val">0</span>%</span>
+                </div>
                 <div class="bar-container"><div id="thrust-bar" class="bar-fill"></div></div>
-                <div style="margin-top: 10px;">VELOCITY: <span id="speed-val">0</span> m/s</div>
-                <div style="margin-top: 5px;">ENERGY: <span id="charge-val">100</span>%</div>
-                <div class="bar-container"><div id="charge-bar" class="bar-fill" style="background: #ffaa00; box-shadow: 0 0 10px rgba(255, 170, 0, 0.5);"></div></div>
-            </div>
-
-            <div id="top-right" class="readout">
-                <div id="sector-id">SECTOR: UNKNOWN</div>
-                <div id="coords">X: 0.00 Y: 0.00 Z: 0.00</div>
-            </div>
-
-            <div id="bottom-left" class="readout">
-                <div>MSG LOG:</div>
-                <div id="messages" style="height: 60px; overflow: hidden;">
-                    > STANDBY FOR SECTOR ANALYSIS...<br>
-                    > NO SIGNS OF LIFE DETECTED.<br>
+                
+                <div class="stat-row">
+                    <span class="stat-label">CORE CHARGE</span>
+                    <span class="stat-value"><span id="charge-val">100</span>%</span>
+                </div>
+                <div class="bar-container"><div id="charge-bar" class="bar-fill" style="background: #ffcc00; box-shadow: 0 0 15px rgba(255, 204, 0, 0.4);"></div></div>
+                
+                <div class="stat-row" style="margin-top: 10px;">
+                    <span class="stat-label">REL. VELOCITY</span>
+                    <span class="stat-value"><span id="speed-val">0.0</span> <span style="font-size: 0.6rem; opacity: 0.5;">m/s</span></span>
                 </div>
             </div>
 
-            <div id="bottom-right" class="readout">
-                <div style="font-size: 0.7rem; opacity: 0.7;">SCANNER</div>
-                <canvas id="tracker-canvas" width="260" height="100" style="margin-top: 5px;"></canvas>
+            <div id="top-right" class="readout readout-right">
+                <div class="readout-header">Navigation // Sector Data</div>
+                <div id="sector-id" style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; color: #fff;">UNKNOWN SECTOR</div>
+                <div class="stat-row" style="margin-top: 8px;">
+                    <span class="stat-label">POS:</span>
+                    <div class="coord-grid">
+                        <span class="coord-seg" id="pos-x">0</span>
+                        <span class="coord-seg" id="pos-y">0</span>
+                        <span class="coord-seg" id="pos-z">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bottom-left" class="readout readout-left">
+                <div class="readout-header">Comm Link // Message Log</div>
+                <div id="messages"></div>
+            </div>
+
+            <div id="economy-panel" class="readout readout-right" style="top: 480px; right: 30px; width: 240px;">
+                <div class="readout-header">Wallet // Assets</div>
+                <div class="stat-row">
+                    <span class="stat-label">CREDITS</span>
+                    <span class="stat-value" id="credits-val" style="color: #ffcc00;">0</span>
+                </div>
+                <div style="font-size: 0.7rem; margin-top: 10px; opacity: 0.8;">
+                    <div class="readout-header" style="font-size: 0.6rem; color: #88ccff;">Cargo Bay</div>
+                    <div id="inventory-list">EMPTY</div>
+                </div>
+            </div>
+
+            <div id="bottom-right" class="readout readout-right">
+                <div class="readout-header">Tactical // Local Scan</div>
+                <canvas id="tracker-canvas" width="268" height="120" style="display: block;"></canvas>
             </div>
         `;
         document.body.appendChild(this.container);
@@ -110,10 +204,17 @@ export default class HUD {
         this.chargeVal = this.container.querySelector('#charge-val');
         this.chargeBar = this.container.querySelector('#charge-bar');
         this.sectorId = this.container.querySelector('#sector-id');
-        this.coords = this.container.querySelector('#coords');
+        this.posX = this.container.querySelector('#pos-x');
+        this.posY = this.container.querySelector('#pos-y');
+        this.posZ = this.container.querySelector('#pos-z');
         this.messages = this.container.querySelector('#messages');
+        this.creditsVal = this.container.querySelector('#credits-val');
+        this.inventoryList = this.container.querySelector('#inventory-list');
         this.trackerCanvas = this.container.querySelector('#tracker-canvas');
         this.trackerCtx = this.trackerCanvas.getContext('2d');
+        
+        this.updateTimer = 0;
+        this.updateInterval = 0.1; // 100ms throttle for text
         
         // --- Three.js HUD elements ---
         this.pois = []; // { mesh, position, label }
@@ -135,18 +236,44 @@ export default class HUD {
     update(delta, state) {
         const { thrust, speed, charge, seed, position, ship, targets } = state;
         
-        // Update Readouts
-        this.thrustVal.innerText = Math.round(thrust * 100);
+        // High-frequency visual updates (Bars) - Keep smooth at 60fps
         this.thrustBar.style.width = `${thrust * 100}%`;
-        this.speedVal.innerText = speed.toFixed(1);
-        
-        this.chargeVal.innerText = Math.round(charge);
         this.chargeBar.style.width = `${charge}%`;
 
-        this.sectorId.innerText = `SECTOR: ${seed.toUpperCase()}`;
-        this.coords.innerText = `X:${position.x.toFixed(1)} Y:${position.y.toFixed(1)} Z:${position.z.toFixed(1)}`;
+        // Throttled Text Updates (Reduces jitter and blurriness)
+        this.updateTimer += delta;
+        if (this.updateTimer >= this.updateInterval) {
+            this.updateTimer = 0;
+            
+            this.thrustVal.innerText = Math.round(thrust * 100);
+            this.speedVal.innerText = speed.toFixed(1);
+            this.chargeVal.innerText = Math.round(charge);
+            this.sectorId.innerText = seed.toUpperCase();
+            
+            if (position) {
+                this.posX.innerText = Math.round(position.x);
+                this.posY.innerText = Math.round(position.y);
+                this.posZ.innerText = Math.round(position.z);
+            }
+            
+            // Update Economy
+            if (state.economy) {
+                this.creditsVal.innerText = state.economy.credits.toLocaleString();
+                const inv = state.economy.inventory;
+                if (inv.length === 0) {
+                    this.inventoryList.innerText = "EMPTY";
+                } else {
+                    this.inventoryList.innerHTML = inv.map(([id, qty]) => `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>${id.toUpperCase()}</span>
+                            <span>${qty}</span>
+                        </div>
+                    `).join('');
+                }
+            }
+        }
         
-        // Draw Tracker
+        // Draw Tracker (Always full FPS)
         this.drawTracker(delta, ship, targets);
     }
 
@@ -156,110 +283,97 @@ export default class HUD {
         const h = this.trackerCanvas.height;
         
         ctx.clearRect(0, 0, w, h);
-        ctx.strokeStyle = '#88ccff';
-        ctx.lineWidth = 1;
-        
-        // Draw grid
-        ctx.globalAlpha = 0.2;
-        for(let i=0; i<w; i+=20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
-        for(let i=0; i<h; i+=20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke(); }
         
         // Center of tracker is ship
         const centerX = w / 2;
         const centerY = h / 2;
-        const scale = 0.005; // 1 unit = 0.005 pixels. 10,000 units = 50 pixels.
+        const scale = 0.005;
 
-        // Draw targets
+        // Draw tactical rings
+        ctx.strokeStyle = 'rgba(136, 204, 255, 0.15)';
+        ctx.lineWidth = 1;
+        [20, 40, 60].forEach(r => {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+            ctx.stroke();
+        });
+
+        // Draw crosshair
+        ctx.beginPath();
+        ctx.moveTo(centerX - 10, centerY); ctx.lineTo(centerX + 10, centerY);
+        ctx.moveTo(centerX, centerY - 10); ctx.lineTo(centerX, centerY + 10);
+        ctx.stroke();
+        
+        // Transform and Draw targets
         const shipPos = ship.position;
-        // Correcting quat usage: we want to transform target to ship-local space
         const shipQuatInv = ship.quaternion.clone().invert();
         const relativePos = new THREE.Vector3();
 
         targets.forEach(target => {
             if (!target) return;
-            
-            // Calculate relative position to ship
             relativePos.copy(target.position).sub(shipPos);
-            // Rotate by inverse ship orientation to get "ship-local" coords
             relativePos.applyQuaternion(shipQuatInv);
             
-            // X is side, Z is forward/back
-            // Note: In Three.js, -Z is forward. On our tracker, up (negative ty) should be forward.
+            // X is side, Z is forward/back (-Z is forward in Three.js)
             let tx = centerX + relativePos.x * scale;
             let ty = centerY + relativePos.z * scale;
             
-            // Detection range logic
-            const isOutOfRange = (tx < 5 || tx > w - 5 || ty < 5 || ty > h - 5);
+            const dist = relativePos.length();
+            const isOutOfRange = (dist * scale > 60);
             
-            // Clamp to edge if out of range
-            tx = Math.max(5, Math.min(w - 5, tx));
-            ty = Math.max(5, Math.min(h - 5, ty));
-
-            // Pulse animation
-            const pulse = (Math.sin(Date.now() * 0.005) + 1) * 0.5;
-
-            // Shape based on relative altitude
-            const altThreshold = 500;
-            ctx.fillStyle = isOutOfRange ? '#ff4100' : '#88ccff'; 
-            ctx.globalAlpha = isOutOfRange ? (0.2 + pulse * 0.2) : (0.5 + pulse * 0.5);
-
-            if (relativePos.y > altThreshold) {
-                // Above: Triangle up
-                ctx.beginPath();
-                ctx.moveTo(tx, ty - 5);
-                ctx.lineTo(tx - 4, ty + 3);
-                ctx.lineTo(tx + 4, ty + 3);
-                ctx.closePath();
-                ctx.fill();
-            } else if (relativePos.y < -altThreshold) {
-                // Below: Triangle down
-                ctx.beginPath();
-                ctx.moveTo(tx, ty + 5);
-                ctx.lineTo(tx - 4, ty - 3);
-                ctx.lineTo(tx + 4, ty - 3);
-                ctx.closePath();
-                ctx.fill();
-            } else {
-                // Level: Circle
-                ctx.beginPath();
-                ctx.arc(tx, ty, isOutOfRange ? 2 : 4, 0, Math.PI * 2);
-                ctx.fill();
+            if (isOutOfRange) {
+                const dir = new THREE.Vector2(tx - centerX, ty - centerY).normalize();
+                tx = centerX + dir.x * 62;
+                ty = centerY + dir.y * 62;
             }
 
-            // Course Highlight (Square)
-            if (target.userData && target.userData.isCourseTarget) {
-                ctx.strokeStyle = '#00ffaa';
-                ctx.lineWidth = 1.5;
-                ctx.strokeRect(tx - 7, ty - 7, 14, 14);
+            const pulse = (Math.sin(Date.now() * 0.01) + 1) * 0.5;
+            const isCourse = target.userData && target.userData.isCourseTarget;
+
+            ctx.fillStyle = isCourse ? '#00ffaa' : (isOutOfRange ? '#ff4100' : '#88ccff');
+            ctx.globalAlpha = isOutOfRange ? 0.4 : 0.8;
+
+            // Draw target dot
+            ctx.beginPath();
+            ctx.arc(tx, ty, isCourse ? 4 : 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Altitude indicator line
+            ctx.strokeStyle = ctx.fillStyle;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(tx, ty - relativePos.y * scale * 0.5);
+            ctx.stroke();
+
+            if (isCourse) {
+                ctx.globalAlpha = pulse * 0.3;
+                ctx.beginPath();
+                ctx.arc(tx, ty, 8 + pulse * 4, 0, Math.PI * 2);
+                ctx.stroke();
             }
-            
-            // Distance label
-            ctx.globalAlpha = 0.6;
-            ctx.fillStyle = '#88ccff';
-            ctx.font = '8px monospace';
-            const dist = Math.round(relativePos.length());
-            ctx.fillText(dist + "m", tx + 5, ty);
         });
 
-        // Draw Ship "icon" in center
+        // Ship Icon (Modernized)
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.moveTo(centerX, centerY - 5);
-        ctx.lineTo(centerX - 3, centerY + 3);
-        ctx.lineTo(centerX + 3, centerY + 3);
+        ctx.moveTo(centerX, centerY - 4);
+        ctx.lineTo(centerX - 3, centerY + 4);
+        ctx.lineTo(centerX + 3, centerY + 4);
         ctx.fill();
     }
 
     addMessage(msg) {
         const div = document.createElement('div');
-        div.innerText = `> ${msg}`;
+        div.className = 'msg-entry';
+        div.innerText = msg;
         this.messages.prepend(div);
         if (this.messages.children.length > 5) this.messages.lastChild.remove();
         
-        // Add a glitch effect when a message arrives
-        this.messages.parentElement.classList.add('glitch');
-        setTimeout(() => this.messages.parentElement.classList.remove('glitch'), 500);
+        // Add a flash effect to the log container
+        this.messages.parentElement.classList.add('glitch-flash');
+        setTimeout(() => this.messages.parentElement.classList.remove('glitch-flash'), 300);
     }
 
     /**
