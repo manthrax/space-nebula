@@ -31,8 +31,8 @@ export default class UniverseManager {
         );
 
         const lums = ["High", "Medium", "Low", "Faint"];
-        const stabs = ["Stable", "Unstable", "Highly Volatile", "Chaotic"];
-        const res = ["Abundant", "Standard", "Scarce", "Rich"];
+        const stabs = ["Stable", "Unstable", "Volatile", "Chaotic"];
+        const res = ["Abundant", "Standard", "Scarce", "Depleted"];
 
         const sector = {
             id: key,
@@ -116,7 +116,23 @@ export default class UniverseManager {
     }
 
     getNeighbors(sector) {
+        // Ensure this sector has its own links generated
         this.generateLinks(sector);
+        
+        // CRITICAL: Ensure all 26 adjacent sectors have also generated their links.
+        // This prevents the "Warp Point Mismatch" error where the pathfinder discovers 
+        // a link back to the current sector that wasn't there when the sector was spawned.
+        const { ix, iy, iz } = sector.coords;
+        for (let x = -1; x <= 1; x++) {
+            for (let y = -1; y <= 1; y++) {
+                for (let z = -1; z <= 1; z++) {
+                    if (x === 0 && y === 0 && z === 0) continue;
+                    const neighbor = this.getSector(ix + x, iy + y, iz + z);
+                    this.generateLinks(neighbor);
+                }
+            }
+        }
+
         return sector.links.map(id => this.sectors.get(id));
     }
 

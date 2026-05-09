@@ -64,7 +64,7 @@ export default class FlightController {
 
         // Effects
         this.warpTime = 0;
-        this.warpDuration = 2.0;
+        this.warpDuration = 12.0;
         this.baseFov = camera.fov;
 
         this.cameraLocked = false;
@@ -207,6 +207,10 @@ export default class FlightController {
 
         if (this.isHyperThrusting) {
             this.charge -= this.hyperThrustCost * delta;
+            if (this.charge <= 0) {
+                this.charge = 0;
+                this.isHyperThrusting = false;
+            }
         }
 
         // 2. Finalize Input & Apply Forces
@@ -256,7 +260,7 @@ export default class FlightController {
     updateCamera(delta) {
         // 1. Camera Follow (Flight Mode)
         if (!this.cameraLocked) {
-            const lerpFactor = 1.;//1.0 - Math.pow(0.001, delta); // Frame-rate independent lerp
+            const lerpFactor = 1.0 - Math.pow(0.001, delta); // Frame-rate independent lerp
 
             this._thrustScratch.copy(this.cameraOffset).applyQuaternion(this.ship.quaternion);
             this._rotScratch.copy(this.ship.position).add(this._thrustScratch);
@@ -277,10 +281,10 @@ export default class FlightController {
             this.warpTime -= delta;
             const progress = this.warpTime / this.warpDuration;
             const effect = Math.sin(progress * Math.PI);
-            this.camera.fov = this.baseFov + effect * 30;
+            this.camera.fov = this.baseFov + effect * 60;
             this.camera.updateProjectionMatrix();
 
-            const shake = effect * 0.15;
+            const shake = effect * 0.4;
             this.camera.position.x += (Math.random() - 0.5) * shake;
             this.camera.position.y += (Math.random() - 0.5) * shake;
             this.camera.position.z += (Math.random() - 0.5) * shake;
@@ -292,7 +296,7 @@ export default class FlightController {
         }
     }
 
-    triggerWarp(duration = 2.0) {
+    triggerWarp(duration = 12.0) {
         this.warpTime = duration;
         this.warpDuration = duration;
     }

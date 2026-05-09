@@ -108,8 +108,8 @@ export default class PlanetGenerator {
                             amp *= 0.6;
                             freq *= 2.1;
                         }
-                        float density = smoothstep(uWaterLevel, uWaterLevel + 0.5, h);
-                        gl_FragColor = vec4(uColorLand, density * 0.8);
+                        float density = smoothstep(uWaterLevel - 0.2, uWaterLevel + 0.3, h);
+                        gl_FragColor = vec4(uColorLand, clamp(density * 1.5, 0.0, 1.0));
                     } else {
                         // Terrain Mode
                         float amp = 0.5;
@@ -140,6 +140,7 @@ export default class PlanetGenerator {
             depthWrite: false
         });
 
+
         this.BIOMES = {
             TERRAN: { water: 0x1a237e, land: 0x1b5e20, mtn: 0x4e342e, freq: 2.0, persistence: 0.5, waterLevel: 0.0, mtnLevel: 0.4 },
             DESERT: { water: 0x3e2723, land: 0xbf360c, mtn: 0x5d4037, freq: 3.5, persistence: 0.45, waterLevel: -0.2, mtnLevel: 0.3 },
@@ -157,7 +158,7 @@ export default class PlanetGenerator {
         this.scene.add(mesh);
     }
 
-    generate(seedInput = Math.random(), options = {}) {
+    async generate(seedInput = Math.random(), options = {}) {
         const resolution = options.resolution || 2048;
         
         // Convert hex seed to float for the shader
@@ -194,7 +195,7 @@ export default class PlanetGenerator {
         const biome = this.BIOMES[biomeKey] || this.BIOMES.TERRAN;
 
         this.material.uniforms.uColorWater.value.set(options.colorWater || biome.water);
-        this.material.uniforms.uColorLand.value.set(options.colorLand || biome.land);
+        this.material.uniforms.uColorLand.value.set(options.colorLand || (options.mode === 'clouds' ? 0xffffff : biome.land));
         this.material.uniforms.uColorMountain.value.set(options.colorMountain || biome.mtn);
         
         this.material.uniforms.uFrequency.value = options.freq || biome.freq;
@@ -213,6 +214,14 @@ export default class PlanetGenerator {
 
         const tex = rt.texture;
         tex.userData.renderTarget = rt; // Store for disposal
+
+        // Force a GPU sync by reading a single pixel (blocks until render is complete)
+        const pixel = new Uint8Array(4);
+        this.renderer.readRenderTargetPixels(rt, 0, 0, 1, 1, pixel);
+
+        // Artificial delay to make the warp feel like a journey and mask asset prep
+        await new Promise(r => setTimeout(r, 600 + Math.random() * 400));
+
         return tex;
     }
 }

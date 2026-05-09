@@ -11,7 +11,7 @@ export default class HUD {
         
         // --- DOM Elements ---
         this.container = document.createElement('div');
-        this.container.id = 'hud-container';
+        this.container.id = 'hud-root';
         this.container.innerHTML = `
             <style>
                 #hud-root {
@@ -20,10 +20,34 @@ export default class HUD {
                     pointer-events: none;
                     font-family: 'JetBrains Mono', 'Courier New', monospace;
                     color: #88ccff;
-                    overflow: hidden;
                     user-select: none;
                     text-shadow: 0 0 5px rgba(136, 204, 255, 0.4);
+                    z-index: 2000;
+
+                    display: grid;
+                    grid-template-areas:
+                        "tl . tr"
+                        "ml . mr"
+                        "bl . br";
+                    grid-template-columns: 350px 1fr 350px;
+                    grid-template-rows: auto 1fr auto;
+                    padding: 30px;
+                    box-sizing: border-box;
+                    gap: 20px;
                 }
+
+                #top-left { grid-area: tl; justify-self: start; width: 320px; }
+                #top-right-group { 
+                    grid-area: tr; 
+                    justify-self: end; 
+                    width: 320px;
+                    display: flex; 
+                    flex-direction: column; 
+                    gap: 20px; 
+                    align-items: flex-end;
+                }
+                #bottom-left { grid-area: bl; justify-self: start; align-self: end; width: 320px; }
+                #bottom-right { grid-area: br; justify-self: end; align-self: end; width: 320px; }
 
                 #hud-root::before {
                     content: " ";
@@ -33,22 +57,24 @@ export default class HUD {
                     background: 
                         linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), 
                         linear-gradient(90deg, rgba(255, 0, 0, 0.05), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.05));
-                    z-index: 100;
+                    z-index: -1;
                     background-size: 100% 3px, 4px 100%;
                     pointer-events: none;
-                    opacity: 0.4;
+                    opacity: 0.3;
                 }
 
                 .readout {
-                    position: absolute;
                     padding: 12px;
-                    background: rgba(0, 20, 30, 0.15);
+                    background: rgba(0, 20, 30, 0.4);
                     border: 1px solid rgba(136, 204, 255, 0.1);
-                    transition: all 0.3s ease;
+                    backdrop-filter: blur(8px);
+                    pointer-events: auto;
+                    box-sizing: border-box;
+                    width: 100%;
                 }
 
                 .readout-left { border-left: 2px solid rgba(136, 204, 255, 0.5); }
-                .readout-right { border-right: 2px solid rgba(136, 204, 255, 0.5); }
+                .readout-right { border-right: 2px solid rgba(136, 204, 255, 0.5); text-align: right; }
 
                 .readout-header {
                     font-family: 'Outfit', sans-serif;
@@ -61,12 +87,9 @@ export default class HUD {
                     border-bottom: 1px solid rgba(136, 204, 255, 0.1);
                     padding-bottom: 4px;
                 }
-
-                #top-left { top: 30px; left: 30px; width: 300px; }
-                #top-right { top: 30px; right: 30px; text-align: right; width: 300px; }
-                #bottom-left { bottom: 30px; left: 30px; width: 320px; }
-                #bottom-right { bottom: 30px; right: 30px; width: 320px; }
-                #economy-panel { top: 450px; right: 30px; width: 240px; }
+                
+                /* Remove old absolute positioning */
+                #top-left, #top-right, #bottom-left, #bottom-right, #economy-panel { top: auto; right: auto; bottom: auto; left: auto; }
                 
                 .stat-row {
                     display: flex;
@@ -160,33 +183,35 @@ export default class HUD {
                 </div>
             </div>
 
-            <div id="top-right" class="readout readout-right">
-                <div class="readout-header">Navigation // Sector Data</div>
-                <div id="sector-id" style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; color: #fff;">UNKNOWN SECTOR</div>
-                <div class="stat-row" style="margin-top: 8px;">
-                    <span class="stat-label">POS:</span>
-                    <div class="coord-grid">
-                        <span class="coord-seg" id="pos-x">0</span>
-                        <span class="coord-seg" id="pos-y">0</span>
-                        <span class="coord-seg" id="pos-z">0</span>
-                    </div>
-                </div>
-            </div>
-
             <div id="bottom-left" class="readout readout-left">
                 <div class="readout-header">Comm Link // Message Log</div>
                 <div id="messages"></div>
             </div>
 
-            <div id="economy-panel" class="readout readout-right" style="top: 480px; right: 30px; width: 240px;">
-                <div class="readout-header">Wallet // Assets</div>
-                <div class="stat-row">
-                    <span class="stat-label">CREDITS</span>
-                    <span class="stat-value" id="credits-val" style="color: #ffcc00;">0</span>
+            <div id="top-right-group">
+                <div id="top-right" class="readout readout-right">
+                    <div class="readout-header">Navigation // Sector Data</div>
+                    <div id="sector-id" style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; color: #fff;">UNKNOWN SECTOR</div>
+                    <div class="stat-row" style="margin-top: 8px;">
+                        <span class="stat-label">POS:</span>
+                        <div class="coord-grid">
+                            <span class="coord-seg" id="pos-x">0</span>
+                            <span class="coord-seg" id="pos-y">0</span>
+                            <span class="coord-seg" id="pos-z">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div style="font-size: 0.7rem; margin-top: 10px; opacity: 0.8;">
-                    <div class="readout-header" style="font-size: 0.6rem; color: #88ccff;">Cargo Bay</div>
-                    <div id="inventory-list">EMPTY</div>
+
+                <div id="economy-panel" class="readout readout-right">
+                    <div class="readout-header">Wallet // Assets</div>
+                    <div class="stat-row">
+                        <span class="stat-label">CREDITS</span>
+                        <span class="stat-value" id="credits-val" style="color: #ffcc00;">0</span>
+                    </div>
+                    <div style="font-size: 0.7rem; margin-top: 10px; opacity: 0.8;">
+                        <div class="readout-header" style="font-size: 0.6rem; color: #88ccff;">Cargo Bay</div>
+                        <div id="inventory-list">EMPTY</div>
+                    </div>
                 </div>
             </div>
 

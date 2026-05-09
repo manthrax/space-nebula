@@ -107,7 +107,7 @@ function setupPlanetPreview() {
     previewScene.add(previewPlanet);
 
     const cloudGeo = new THREE.SphereGeometry(1.23, 64, 64);
-    const cloudMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 });
+    const cloudMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 });
     previewClouds = new THREE.Mesh(cloudGeo, cloudMat);
     previewScene.add(previewClouds);
 }
@@ -135,16 +135,43 @@ dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5
 const loader = new GLTFLoader();
 loader.setDRACOLoader(dracoLoader);
 
-loader.load('ship.glb', async (gltf) => {
-    const ship = gltf.scene;
-    ship.scale.multiplyScalar(.3)
-    ship.updateMatrixWorld(true)
+
+let shipLibrary = {}
+
+loader.load('ship_stack.glb', async (gltf) => {
+    // Find all potential ships in the stack
+    const shipCandidates = [];
+    gltf.scene.traverse(child => {
+        if (child.name.startsWith('ship_')) {
+            shipCandidates.push(child);
+            child.position.set(0, 0, 0)
+            child.updateMatrixWorld(true);
+            child.userData.worldBounds = new THREE.Box3().setFromObject(child);
+            shipLibrary[child.name.slice(5)] = child;
+        }
+    });
+
+    if (shipCandidates.length === 0) {
+        console.error("ShipStack: No meshes starting with 'ship_' found in ship_stack.glb");
+        return;
+    }
+
+    // Pick a ship (for now we pick the first, or could pick based on a preference)
+    const selectedShip = shipLibrary.freighter.clone(true);
+
+    // Create a clean container for the player ship
+    const ship = new THREE.Group();
+    ship.add(selectedShip);
+
+    ship.scale.multiplyScalar(0.3);
+    ship.updateMatrixWorld(true);
+
     ship.traverse((child) => {
-        if (child.isMesh) {
-            // PBR Shiny Metal
+        if (child.isMesh && !child.name.startsWith('thruster')) {
+            // PBR Shiny Metal for ship hull
             child.material.metalness = 1.0;
             child.material.roughness = 0.1;
-            child.material.envMapIntensity = 2.5;
+            child.material.envMapIntensity = 20.5;
         }
 
         if (child.name.startsWith("thruster")) {
@@ -165,7 +192,7 @@ loader.load('ship.glb', async (gltf) => {
                     void main() {
                         vUv = uv;
                         vec3 pos = position;
-                        float noise = sin(uTime * 50.0 + vUv.x * 10.0) * 0.1 * uStrength;
+                        float noise = sin(uTime * 50.0 + vUv.x * 1230.0) * 0.1 * uStrength;
                         if (pos.y > 0.0) pos.y *= (uStrength + noise) * 20.;
                         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
                     }
@@ -201,11 +228,12 @@ loader.load('ship.glb', async (gltf) => {
     animate();
 });
 
-function trackTarget(pos) {
-    if (orbitControls) {
+function trackTarget(pos, quaternion) {
+    if (orbitControls && orbitControls.enabled) {
         camera.position.sub(orbitControls.target);
         orbitControls.target.copy(pos);
         camera.position.add(orbitControls.target);
+        camera.up.set(0, 1, 0).applyQuaternion(quaternion);
         orbitControls.update();
     }
 }
@@ -262,7 +290,7 @@ async function spawnPlanet(sector, fromWarp = false) {
         const cloudMat = new THREE.MeshStandardMaterial({
             map: cloudTexture,
             transparent: true,
-            opacity: 0.7,
+            opacity: 0.9,
             depthWrite: false,
             side: THREE.DoubleSide
         });
@@ -349,20 +377,22 @@ async function initGame() {
         resumeBtn.classList.add('disabled');
     }
 
-    resumeBtn.addEventListener('click', async () => {
+    resumeBtn.addEventListener('click', async (e) => {
+        e.target.blur();
         const savedData = await persistence.loadState();
         if (savedData) {
             await restoreState(savedData);
             isStarted = true;
             document.getElementById('overlay').classList.add('hidden');
             hud.show();
-            hud.addMessage("MISSION RESUMED. WELCOME BACK, CAPTAIN.");
-            tts.speak("Welcome back, Captain. Mission resumed.", { voice: 'af_river' });
+            hud.addMessage("MISSION RESUMED.");
+            tts.speak("resumed.", { voice: 'af_river' });
             setupPlanetPreview();
         }
     });
 
-    document.getElementById('startBtn').addEventListener('click', async () => {
+    document.getElementById('startBtn').addEventListener('click', async (e) => {
+        e.target.blur();
         const savedData = await persistence.loadState();
         if (savedData) {
             if (!confirm("Starting a new expedition will clear your existing save. Proceed?")) {
@@ -398,7 +428,8 @@ async function initGame() {
         resumeBtn.classList.remove('disabled');
         hud.show();
         hud.addMessage("SYSTEMS ONLINE. NEW EXPEDITION INITIALIZED.");
-        tts.speak("Welcome to Nebula Drifter. Systems online. New expedition initialized.", { voice: 'af_river' });
+        tts.speak("...;", { voice: 'af_river' });
+        tts.speak("Nebula Drift.", { voice: 'af_river' });
         setupPlanetPreview();
     });
 
@@ -555,7 +586,8 @@ function animate(time) {
     renderer.clear(); // Manual clear to support multi-pass rendering
 
     timer.update(time);
-    const delta = timer.getDelta();
+    let delta = timer.getDelta();
+    if (delta > 0.1) delta = 0.1; // Cap delta to prevent skips after long async loads
     const elapsed = timer.getElapsed();
 
     nebularity.update(delta);
@@ -602,7 +634,7 @@ function animate(time) {
 
         // 2. Update Camera AFTER all physics are settled
         if (flightController.cameraLocked) {
-            trackTarget(flightController.ship.position);
+            trackTarget(flightController.ship.position, flightController.ship.quaternion);
         } else {
             flightController.updateCamera(delta);
         }
@@ -688,18 +720,21 @@ function animate(time) {
                     }
                 }
 
-                nebularity.morph(currentSector.seed, { duration: 2.0 });
-                flightController.triggerWarp(2.0);
+                const transDuration = 12.0;
+                nebularity.morph(currentSector.seed, { duration: transDuration });
+                flightController.triggerWarp(transDuration);
+                hud.addMessage(`INITIATING HYPERSPACE JUMP...`);
                 hud.addMessage(`TRANSITIONING TO NODE: ${currentSector.id.toUpperCase()}...`);
 
                 const sectorName = nameGen.getName(currentSector.seed, 'sector');
-                await tts.speak(`Entering ${sectorName} system.`, { voice: 'af_river' });
 
-                const attr = currentSector.attributes;
-                const summary = `Luminosity; ${attr.luminosity}. Stability; ${attr.stability}. Resource density; ${attr.resources}.`;
-
-                // Speak summary at normal speed after the first message finishes
-                await tts.speak(summary, { voice: 'af_river', speed: 1.0 });
+                // Start voice-over in background to mask the journey
+                (async () => {
+                    await tts.speak(`Entering ${sectorName}.`, { voice: 'af_alloy', speed: 1 });
+                    const attr = currentSector.attributes;
+                    const summary = `Luminosity; ${attr.luminosity}. Stability; ${attr.stability}. Resource density; ${attr.resources}.`;
+                    await tts.speak(summary, { voice: 'af_river', speed: 1 });
+                })();
 
                 await spawnPlanet(currentSector, true);
 
@@ -884,7 +919,7 @@ window.addEventListener('keydown', (e) => {
                     flightController.cameraLocked = flightController.autopilot;
                     orbitControls.enabled = flightController.autopilot;
                     if (orbitControls.enabled) {
-                        trackTarget(flightController.ship.position);
+                        trackTarget(flightController.ship.position, flightController.ship.quaternion);
                         orbitControls.update();
                     }
 
@@ -914,7 +949,7 @@ window.addEventListener('keydown', (e) => {
                             flightController.autopilotTarget = newTargetWP.position;
                             flightController.cameraLocked = true;
                             orbitControls.enabled = true;
-                            trackTarget(flightController.ship.position);
+                            trackTarget(flightController.ship.position, flightController.ship.quaternion);
                             orbitControls.update();
                             hud.addMessage("NEW COURSE PLOTTED. AUTOPILOT ENGAGED.");
                         } else {

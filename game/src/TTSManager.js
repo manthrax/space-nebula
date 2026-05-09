@@ -13,13 +13,13 @@ export default class TTSManager {
         this.onStart = null;    // Callback for when speech starts
         this.onEnd = null;      // Callback for when speech ends
         this.onSubtitles = null; // Callback for word timestamps
-        
+
         this._speakResolve = null; // Promise resolver for current speech
-        
+
         this.speechQueue = null; // Queue for speech if audio is blocked
         this._hasInteracted = false;
         this._setupGestureLock();
-        
+
         this.voices = {
             "American English": [
                 { id: "af_heart", name: "Heart" },
@@ -70,7 +70,7 @@ export default class TTSManager {
         return new Promise((resolve, reject) => {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             const modelUrl = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.min.js";
-            
+            //"/kokoro.web.min.js"; //
             // Inline worker code for portability, based on tts-demo.html
             const workerCode = `
                 let tts=null;
@@ -110,8 +110,8 @@ export default class TTSManager {
                             const { KokoroTTS }=await import("${modelUrl}");
                             try {
                                 tts=await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX-timestamped", {
-                                    dtype: ${isMobile ? '"q4"' : '"fp32"'},
-                                    device: ${isMobile ? '"wasm"' : '"webgpu"'},
+                                    dtype: "${isMobile ? "q4" : "fp32"}",
+                                    device: "${isMobile ? "wasm" : "webgpu"}",
                                     progress_callback: progress
                                 });
                             } catch(err) {
@@ -253,14 +253,14 @@ export default class TTSManager {
 
         if (!this.isReady || !this._hasInteracted) {
             console.warn("TTSManager: Not ready or no gesture. Queuing speech.");
-            this.speechQueue = { text, options }; // Keep the "auto-unlock" one for the first interaction
+            this.speechQueue = [{ text, options }]; // Keep the "auto-unlock" one for the first interaction
             this._isProcessingQueue = false;
             resolve();
             return;
         }
 
         console.log(`TTSManager: Processing speech: "${text}"`);
-        
+
         // Return a promise for this specific speech task
         await new Promise((done) => {
             this._speakResolve = () => {
@@ -285,7 +285,7 @@ export default class TTSManager {
             if (this._hasInteracted) return;
             this._hasInteracted = true;
             console.log("TTSManager: User gesture detected, audio unlocked.");
-            
+
             // Remove listeners
             window.removeEventListener('click', unlock);
             window.removeEventListener('keydown', unlock);
@@ -323,13 +323,13 @@ export default class TTSManager {
 
     _handleAudioData(pcm, sampleRate, timestamps) {
         console.log("TTSManager: Audio data received, padding and playing...");
-        
+
         // Add silence to prevent clipping on some hardware/browsers
         const silenceDuration = 0.25;
         const silenceSamples = Math.floor(sampleRate * silenceDuration);
         const paddedPcm = new Float32Array(pcm.length + silenceSamples);
         paddedPcm.set(pcm, silenceSamples);
-        
+
         // Offset timestamps to match the padded audio
         const paddedTimestamps = timestamps.map(t => ({
             ...t,
@@ -365,7 +365,7 @@ export default class TTSManager {
         const update = () => {
             if (!this.currentAudio) return;
             const currentTime = this.currentAudio.currentTime;
-            
+
             if (this.onSubtitles) {
                 const activeIndex = timestamps.findIndex(t => currentTime >= t.start && currentTime <= t.end);
                 this.onSubtitles(timestamps, activeIndex);

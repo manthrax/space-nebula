@@ -8,7 +8,7 @@ export default class Starfield {
     constructor(scene, count = 2000) {
         this.count = count;
         this.boxSize = 4000;
-        
+
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(count * 3 * 2); // 2 vertices per streak
         const offsets = new Float32Array(count * 3 * 2);
@@ -35,19 +35,19 @@ export default class Starfield {
 
             const idx = i * 6;
             const cIdx = i * 6;
-            
+
             // Start vertex
-            positions[idx] = 0; positions[idx+1] = 0; positions[idx+2] = 0;
-            offsets[idx] = x; offsets[idx+1] = y; offsets[idx+2] = z;
+            positions[idx] = 0; positions[idx + 1] = 0; positions[idx + 2] = 0;
+            offsets[idx] = x; offsets[idx + 1] = y; offsets[idx + 2] = z;
             vertexType[i * 2] = 0;
-            colors[cIdx] = color.r; colors[cIdx+1] = color.g; colors[cIdx+2] = color.b;
+            colors[cIdx] = color.r; colors[cIdx + 1] = color.g; colors[cIdx + 2] = color.b;
             brightness[i * 2] = bright;
 
             // End vertex
-            positions[idx+3] = 0; positions[idx+4] = 0; positions[idx+5] = 0;
-            offsets[idx+3] = x; offsets[idx+4] = y; offsets[idx+5] = z;
+            positions[idx + 3] = 0; positions[idx + 4] = 0; positions[idx + 5] = 0;
+            offsets[idx + 3] = x; offsets[idx + 4] = y; offsets[idx + 5] = z;
             vertexType[i * 2 + 1] = 1;
-            colors[cIdx+3] = color.r; colors[cIdx+4] = color.g; colors[cIdx+5] = color.b;
+            colors[cIdx + 3] = color.r; colors[cIdx + 4] = color.g; colors[cIdx + 5] = color.b;
             brightness[i * 2 + 1] = bright;
         }
 
@@ -94,12 +94,16 @@ export default class Starfield {
                     // Basic length + Warp stretch
                     float streakLen = speed * 0.05 + uWarp * 500.0;
                     
+
+                    vAlpha = clamp(speed * 0.005 + uWarp, 0.1, 0.8) * aBrightness;
+
+
                     // Move the 'end' vertex along the velocity vector
                     if (aType > 0.5) {
                         worldPos += dir * streakLen;
+                        vAlpha = 0.0;
                     }
 
-                    vAlpha = clamp(speed * 0.005 + uWarp, 0.1, 0.8) * aBrightness;
                     vColor = aColor;
                     
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);

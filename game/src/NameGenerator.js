@@ -6,7 +6,7 @@ export default class NameGenerator {
         this.prefixes = [
             "Acheron", "Boreas", "Calyx", "Echelon", "Flux", "Golgotha", "Hades",
             "Krios", "Lethe", "Mantle", "Node", "Obsidian", "Phyx",
-            "Quasar", "Relay", "Styx", "Tensor", "Umbra", "Warp", "Xeno"
+            "Quasar", "Styx", "Tensor", "Umbra", "Warp", "Xeno"
         ];
 
         this.roots = [
@@ -48,7 +48,7 @@ export default class NameGenerator {
             `Sector ${num}-${p}`
         ];
 
-        return patterns[Math.floor(rng() * patterns.patterns)]; // Wait, fix patterns.length
+        return patterns[Math.floor(rng() * patterns.length)];
     }
 
     // Actually, let's make it more robust
