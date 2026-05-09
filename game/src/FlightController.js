@@ -257,21 +257,22 @@ export default class FlightController {
 
     }
 
-    updateCamera(delta) {
+    updateCameraPosition(delta) {
         // 1. Camera Follow (Flight Mode)
-        if (!this.cameraLocked) {
-            const lerpFactor = 1.0 - Math.pow(0.001, delta); // Frame-rate independent lerp
+        if (this.cameraLocked) return;
+        const lerpFactor = 1.0 - Math.pow(0.001, delta); // Frame-rate independent lerp
 
-            this._thrustScratch.copy(this.cameraOffset).applyQuaternion(this.ship.quaternion);
-            this._rotScratch.copy(this.ship.position).add(this._thrustScratch);
-            this.camera.position.lerp(this._rotScratch, lerpFactor);
+        this._thrustScratch.copy(this.cameraOffset).applyQuaternion(this.ship.quaternion);
+        this._rotScratch.copy(this.ship.position).add(this._thrustScratch);
+        this.camera.position.lerp(this._rotScratch, lerpFactor);
 
-            this._thrustScratch.copy(this.cameraLookOffset).applyQuaternion(this.ship.quaternion).add(this.ship.position);
-            this._rotScratch.set(0, 1, 0).applyQuaternion(this.ship.quaternion);
-            this.camera.up.copy(this._rotScratch);
-            this.camera.lookAt(this._thrustScratch);
-        }
+        this._thrustScratch.copy(this.cameraLookOffset).applyQuaternion(this.ship.quaternion).add(this.ship.position);
+        this._rotScratch.set(0, 1, 0).applyQuaternion(this.ship.quaternion);
+        this.camera.up.copy(this._rotScratch);
+        this.camera.lookAt(this._thrustScratch);
+    }
 
+    updateCameraEffects(delta) {
         // 2. FOV and Warp Effects
         const speedVal = this.velocity.length();
         const speedFovOffset = Math.min(speedVal * 0.01, 10);

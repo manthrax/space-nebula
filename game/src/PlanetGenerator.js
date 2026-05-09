@@ -8,7 +8,7 @@ export default class PlanetGenerator {
         this.renderer = renderer;
         this.scene = new THREE.Scene();
         this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        
+
         const Snoise3D = `
             vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
             vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -158,9 +158,9 @@ export default class PlanetGenerator {
         this.scene.add(mesh);
     }
 
-    async generate(seedInput = Math.random(), options = {}) {
+    generate(seedInput = Math.random(), options = {}) {
         const resolution = options.resolution || 2048;
-        
+
         // Convert hex seed to float for the shader
         let seed = 0;
         if (typeof seedInput === 'string') {
@@ -189,7 +189,7 @@ export default class PlanetGenerator {
             return x - Math.floor(x);
         };
         const r = pRng(seed);
-        
+
         const biomeKeys = Object.keys(this.BIOMES);
         const biomeKey = biomeKeys[Math.floor(r * biomeKeys.length)];
         const biome = this.BIOMES[biomeKey] || this.BIOMES.TERRAN;
@@ -197,7 +197,7 @@ export default class PlanetGenerator {
         this.material.uniforms.uColorWater.value.set(options.colorWater || biome.water);
         this.material.uniforms.uColorLand.value.set(options.colorLand || (options.mode === 'clouds' ? 0xffffff : biome.land));
         this.material.uniforms.uColorMountain.value.set(options.colorMountain || biome.mtn);
-        
+
         this.material.uniforms.uFrequency.value = options.freq || biome.freq;
         this.material.uniforms.uPersistence.value = options.persistence || biome.persistence;
         this.material.uniforms.uWaterLevel.value = options.waterLevel !== undefined ? options.waterLevel : biome.waterLevel;
@@ -205,10 +205,10 @@ export default class PlanetGenerator {
         this.material.uniforms.uMode.value = options.mode === 'clouds' ? 1.0 : 0.0;
 
         this.material.uniforms.uSeed.value = parseFloat(seed);
-        
+
         const oldTarget = this.renderer.getRenderTarget();
         this.renderer.setRenderTarget(rt);
-        this.renderer.clear(); 
+        this.renderer.clear();
         this.renderer.render(this.scene, this.camera);
         this.renderer.setRenderTarget(oldTarget);
 
@@ -220,7 +220,7 @@ export default class PlanetGenerator {
         this.renderer.readRenderTargetPixels(rt, 0, 0, 1, 1, pixel);
 
         // Artificial delay to make the warp feel like a journey and mask asset prep
-        await new Promise(r => setTimeout(r, 600 + Math.random() * 400));
+        //await new Promise(r => setTimeout(r, 600 + Math.random() * 400));
 
         return tex;
     }

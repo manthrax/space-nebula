@@ -12,8 +12,11 @@ import Exporter from '../../src/Exporter.js';
 import UniverseManager from './UniverseManager.js';
 import StarMap from './StarMap.js';
 import WarpPoint from './WarpPoint.js';
+import SectorManager from './SectorManager.js';
+import MarketUI from './MarketUI.js';
+import CameraController from './CameraController.js';
+import { executeWarpSequence } from './WarpSequence.js';
 import EconomyManager from './EconomyManager.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import Starfield from './Starfield.js';
 import TTSManager from './TTSManager.js';
 
@@ -74,52 +77,17 @@ const persistence = new PersistenceManager();
 const nameGen = new NameGenerator();
 const economy = new EconomyManager();
 let shieldSystem = null;
-let planets = [];
 let lastSaveTime = 0;
 let lastJumpTime = 0;
-let lockedGateCoords = null; // Prevent immediate re-warp
-const GATE_LOCKOUT_DIST = 1000;
 
-let previewRenderer, previewScene, previewCamera, previewPlanet, previewClouds, uiPlanetGen;
-function setupPlanetPreview() {
-    const container = document.getElementById('planet-preview-container');
-    if (!container || previewRenderer) return;
+const sectorManager = new SectorManager({
+    scene, universe, hud, planetGen, nameGen
+});
 
-    previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    previewRenderer.setSize(200, 200);
-    previewRenderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(previewRenderer.domElement);
-
-    uiPlanetGen = new PlanetGenerator(previewRenderer);
-
-    previewScene = new THREE.Scene();
-    previewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-    previewCamera.position.z = 2.5;
-
-    const light = new THREE.DirectionalLight(0xffffff, 2.5);
-    light.position.set(5, 3, 5);
-    previewScene.add(light);
-    previewScene.add(new THREE.AmbientLight(0xffffff, 0.6));
-
-    const geo = new THREE.SphereGeometry(1.2, 64, 64);
-    const mat = new THREE.MeshBasicMaterial();
-    previewPlanet = new THREE.Mesh(geo, mat);
-    previewScene.add(previewPlanet);
-
-    const cloudGeo = new THREE.SphereGeometry(1.23, 64, 64);
-    const cloudMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 });
-    previewClouds = new THREE.Mesh(cloudGeo, cloudMat);
-    previewScene.add(previewClouds);
-}
+const market = new MarketUI({ economy, hud, sectorManager });
 
 // --- Cinematic Autopilot Camera ---
-const orbitControls = new OrbitControls(camera, renderer.domElement);
-orbitControls.enabled = false;
-orbitControls.enableDamping = true;
-orbitControls.dampingFactor = 0.05;
-orbitControls.minDistance = 8;
-orbitControls.maxDistance = 100;
-orbitControls.enablePan = false;
+const cameraController = new CameraController(camera, renderer.domElement);
 
 const starfield = new Starfield(scene, 3000);
 
@@ -219,6 +187,7 @@ loader.load('ship_stack.glb', async (gltf) => {
     ship.position.set(0, 0, 0);
     scene.add(ship);
     flightController = new FlightController(ship, camera);
+    sectorManager.setFlightController(flightController);
     shieldSystem = new ShieldSystem(ship, scene);
 
     // Start lifecycle
@@ -228,142 +197,7 @@ loader.load('ship_stack.glb', async (gltf) => {
     animate();
 });
 
-function trackTarget(pos, quaternion) {
-    if (orbitControls && orbitControls.enabled) {
-        camera.position.sub(orbitControls.target);
-        orbitControls.target.copy(pos);
-        camera.position.add(orbitControls.target);
-        camera.up.set(0, 1, 0).applyQuaternion(quaternion);
-        orbitControls.update();
-    }
-}
-
-let warpPoints = [];
-
-async function spawnPlanet(sector, fromWarp = false) {
-    const seed = sector.seed;
-    const rng = nameGen._getRNG(seed);
-
-    // Clean up previous
-    planets.forEach(p => {
-        scene.remove(p);
-        if (p.material.map) {
-            if (p.material.map.userData.renderTarget) p.material.map.userData.renderTarget.dispose();
-            p.material.map.dispose();
-        }
-        // Cleanup Clouds
-        p.children.forEach(child => {
-            if (child.material && child.material.map) {
-                if (child.material.map.userData.renderTarget) child.material.map.userData.renderTarget.dispose();
-                child.material.map.dispose();
-            }
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) child.material.dispose();
-        });
-        p.geometry.dispose();
-        p.material.dispose();
-    });
-    planets = [];
-
-    warpPoints.forEach(wp => wp.dispose(scene));
-    warpPoints = [];
-    hud.pois = [];
-
-    // 1. Generate Planets
-    const isStartSystem = sector.coords.ix === 0 && sector.coords.iy === 0 && sector.coords.iz === 0;
-    const planetCount = (isStartSystem && urlParams.get('dev') === '1') ? 10 : (rng() < 0.4 ? 1 : 0);
-
-    for (let i = 0; i < planetCount; i++) {
-        const pSeed = seed + "-" + i;
-        const res = 2048;
-
-        // 1. Surface
-        const texture = await planetGen.generate(pSeed, { resolution: res });
-        const radius = 500 + rng() * 1000;
-        const geo = new THREE.SphereGeometry(radius, 64, 64);
-        const mat = new THREE.MeshStandardMaterial({ map: texture, metalness: 0, roughness: 0.8 });
-        const planet = new THREE.Mesh(geo, mat);
-
-        // 2. Clouds
-        const cloudTexture = await planetGen.generate(pSeed, { resolution: res / 2, mode: 'clouds', waterLevel: 0.2 });
-        const cloudGeo = new THREE.SphereGeometry(radius * 1.015, 64, 64);
-        const cloudMat = new THREE.MeshStandardMaterial({
-            map: cloudTexture,
-            transparent: true,
-            opacity: 0.9,
-            depthWrite: false,
-            side: THREE.DoubleSide
-        });
-        const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
-        planet.add(cloudMesh);
-
-        const dist = 5000 + rng() * 8000 + (i * 1000);
-        const angle = rng() * Math.PI * 2;
-        planet.position.set(Math.cos(angle) * dist, (rng() - 0.5) * 4000, Math.sin(angle) * dist);
-
-        scene.add(planet);
-        planets.push(planet);
-        planet.userData.seed = pSeed;
-
-        const planetName = nameGen.getName(pSeed, 'planet');
-        hud.addTargetPOI(planet.position, planetName);
-        if (i === 0 || planetCount < 5) {
-            hud.addMessage(`SCANNER DETECTED: ${planetName}`);
-        }
-    }
-
-    if (planetCount > 5) {
-        hud.addMessage(`SCANNER DETECTED: ${planetCount} PLANETARY BODIES IN THIS CLUSTER.`);
-    }
-
-    // 2. Spawn Warp Points
-    const neighbors = universe.getNeighbors(sector);
-    const MIN_WP_DIST = 2000;
-    const occupiedPositions = [];
-    planets.forEach(p => occupiedPositions.push(p.position));
-
-    neighbors.forEach((neighbor, i) => {
-        let wpPos = new THREE.Vector3();
-        let attempts = 0;
-        let valid = false;
-
-        while (attempts < 20 && !valid) {
-            const dist = 4000 + rng() * 6000;
-            const angle = (i / neighbors.length) * Math.PI * 2 + (rng() - 0.5) * 0.5;
-            wpPos.set(Math.cos(angle) * dist, (rng() - 0.5) * 2000, Math.sin(angle) * dist);
-
-            valid = true;
-            for (const pos of occupiedPositions) {
-                if (wpPos.distanceTo(pos) < MIN_WP_DIST) {
-                    valid = false;
-                    break;
-                }
-            }
-            attempts++;
-        }
-
-        occupiedPositions.push(wpPos.clone());
-
-        const wpName = `WARP NODE: ${nameGen.getName(neighbor.seed, 'sector')}`;
-        const wp = new WarpPoint(scene, wpPos, seed, neighbor.seed, wpName, neighbor.coords);
-        warpPoints.push(wp);
-        hud.addTargetPOI(wpPos, wpName);
-
-        // If emerging from this gate, position the ship here
-        if (fromWarp && lockedGateCoords &&
-            neighbor.coords.ix === lockedGateCoords.ix &&
-            neighbor.coords.iy === lockedGateCoords.iy &&
-            neighbor.coords.iz === lockedGateCoords.iz) {
-
-            flightController.ship.position.copy(wpPos);
-            // Point the ship away from the gate
-            const dirAway = wpPos.clone().normalize().multiplyScalar(500);
-            flightController.ship.position.add(dirAway);
-            flightController.ship.lookAt(new THREE.Vector3(0, 0, 0));
-            flightController.velocity.copy(dirAway.normalize().multiplyScalar(200));
-        }
-    });
-}
+// SectorManager handles planet and warp point spawning
 
 
 // --- Game Lifecycle ---
@@ -379,6 +213,9 @@ async function initGame() {
 
     resumeBtn.addEventListener('click', async (e) => {
         e.target.blur();
+        if (isStarted) {
+            return;
+        }
         const savedData = await persistence.loadState();
         if (savedData) {
             await restoreState(savedData);
@@ -387,7 +224,6 @@ async function initGame() {
             hud.show();
             hud.addMessage("MISSION RESUMED.");
             tts.speak("resumed.", { voice: 'af_river' });
-            setupPlanetPreview();
         }
     });
 
@@ -420,7 +256,7 @@ async function initGame() {
         starMap.selectedSector = null;
         document.getElementById('map-sidebar').classList.add('hidden');
 
-        spawnPlanet(currentSector);
+        await sectorManager.spawn(currentSector);
         nebularity.morph(currentSector.seed, { resolution: 1024 });
 
         isStarted = true;
@@ -430,7 +266,6 @@ async function initGame() {
         hud.addMessage("SYSTEMS ONLINE. NEW EXPEDITION INITIALIZED.");
         tts.speak("...;", { voice: 'af_river' });
         tts.speak("Nebula Drift.", { voice: 'af_river' });
-        setupPlanetPreview();
     });
 
     if (urlParams.get('dev') === '1') {
@@ -446,94 +281,6 @@ async function initGame() {
         }
     }
 }
-
-// --- Market UI Logic ---
-document.getElementById('closeMarket').addEventListener('click', () => {
-    document.getElementById('market-ui').classList.remove('active');
-    if (flightController) flightController.mouse.isLocked = false;
-});
-
-function openMarket() {
-    // Disable mouse look when opening market
-    if (flightController && flightController.mouseLookEnabled) {
-        flightController.mouseLookEnabled = false;
-        if (document.pointerLockElement) document.exitPointerLock();
-    }
-
-    const ui = document.getElementById('market-ui');
-    const list = document.getElementById('market-list');
-    const creditDisplay = document.getElementById('market-credits');
-
-    const prices = economy.getMarketPrices(currentSector.seed);
-    creditDisplay.innerText = `${economy.credits.toLocaleString()} CR`;
-
-    list.innerHTML = economy.commodities.map(item => {
-        const p = prices[item.id];
-        const invQty = economy.inventory.get(item.id) || 0;
-        return `
-            <div class="market-row">
-                <div>
-                    <div style="color: #fff; font-size: 0.9rem;">${item.name}</div>
-                    <div style="font-size: 0.7rem; opacity: 0.5;">IN CARGO: ${invQty}</div>
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <div style="text-align: right; min-width: 80px;">
-                        <div style="color: #ffcc00; font-size: 0.8rem;">${p.buyPrice} CR</div>
-                        <button class="market-btn" onclick="window.marketAction('buy', '${item.id}', ${p.buyPrice})">BUY</button>
-                    </div>
-                    <div style="text-align: right; min-width: 80px;">
-                        <div style="color: #00ffaa; font-size: 0.8rem;">${p.sellPrice} CR</div>
-                        <button class="market-btn" onclick="window.marketAction('sell', '${item.id}', ${p.sellPrice})" ${invQty === 0 ? 'disabled' : ''}>SELL</button>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    // Update Preview
-    let nearestPlanet = null;
-    let minDist = 1000000;
-    planets.forEach(p => {
-        const d = flightController.ship.position.distanceTo(p.position);
-        if (d < minDist) {
-            minDist = d;
-            nearestPlanet = p;
-        }
-    });
-
-    if (!previewPlanet) setupPlanetPreview();
-
-    if (nearestPlanet && previewPlanet && uiPlanetGen) {
-        // We MUST generate it again in the UI renderer's context!
-        const uiTexture = uiPlanetGen.generate(nearestPlanet.userData.seed, { resolution: 1024 });
-        previewPlanet.material.map = uiTexture;
-        previewPlanet.material.needsUpdate = true;
-
-        if (previewClouds) {
-            const uiCloudTexture = uiPlanetGen.generate(nearestPlanet.userData.seed, { resolution: 512, mode: 'clouds', waterLevel: 0.2 });
-            previewClouds.material.map = uiCloudTexture;
-            previewClouds.material.needsUpdate = true;
-        }
-    }
-
-    ui.classList.add('active');
-    if (document.pointerLockElement) document.exitPointerLock();
-}
-
-window.marketAction = (action, itemId, price) => {
-    if (action === 'buy') {
-        if (economy.buy(itemId, 1, price)) {
-            hud.addMessage(`PURCHASED 1 UNIT OF ${itemId.toUpperCase()}.`);
-        } else {
-            hud.addMessage(`INSUFFICIENT CREDITS.`);
-        }
-    } else {
-        if (economy.sell(itemId, 1, price)) {
-            hud.addMessage(`SOLD 1 UNIT OF ${itemId.toUpperCase()}.`);
-        }
-    }
-    openMarket(); // Refresh UI
-};
 
 async function restoreState(saved) {
     currentLatticePos = saved.latticePos || { ix: 0, iy: 0, iz: 0 };
@@ -561,7 +308,7 @@ async function restoreState(saved) {
     if (saved.economy) economy.restoreState(saved.economy);
 
     nebularity.morph(currentSector.seed, { resolution: 1024 });
-    await spawnPlanet(currentSector);
+    await sectorManager.spawn(currentSector);
 
     if (saved.autopilot !== undefined) flightController.autopilot = saved.autopilot;
     if (saved.autopilotTarget) {
@@ -569,17 +316,14 @@ async function restoreState(saved) {
     }
     if (saved.cameraLocked !== undefined) {
         flightController.cameraLocked = saved.cameraLocked;
-        orbitControls.enabled = flightController.cameraLocked;
-        if (saved.orbitTarget) orbitControls.target.set(saved.orbitTarget.x, saved.orbitTarget.y, saved.orbitTarget.z);
+        cameraController.enabled = flightController.cameraLocked;
+        if (saved.orbitTarget) cameraController.setTarget(saved.orbitTarget.x, saved.orbitTarget.y, saved.orbitTarget.z);
         if (saved.cameraPosition) camera.position.set(saved.cameraPosition.x, saved.cameraPosition.y, saved.cameraPosition.z);
-        orbitControls.update();
+        cameraController.update();
     }
 }
 
-function followTarget(targetPoint) {
-    orbitControls.target.copy(targetPoint);
-    orbitControls.update();
-}
+
 
 function animate(time) {
     requestAnimationFrame(animate);
@@ -591,22 +335,10 @@ function animate(time) {
     const elapsed = timer.getElapsed();
 
     nebularity.update(delta);
-
-    // Update Market Preview
-    const marketUI = document.getElementById('market-ui');
-    if (marketUI && marketUI.classList.contains('active') && previewRenderer) {
-        previewPlanet.rotation.y += delta * 0.1;
-        if (previewClouds) previewClouds.rotation.y += delta * 0.15;
-        previewRenderer.render(previewScene, previewCamera);
-    }
+    market.update(delta);
 
     // Rotate world planets and clouds
-    planets.forEach(p => {
-        p.rotation.y += delta * 0.05;
-        p.children.forEach(child => {
-            child.rotation.y += delta * 0.03;
-        });
-    });
+    sectorManager.updateRotations(delta);
 
     // Background Sim (Attract Mode / Map Unpaused)
     if (flightController) {
@@ -618,7 +350,7 @@ function animate(time) {
 
         let nearestP = null;
         let minDist = 1000000;
-        planets.forEach(p => {
+        sectorManager.planets.forEach(p => {
             const d = flightController.ship.position.distanceTo(p.position);
             if (d < minDist) {
                 minDist = d;
@@ -633,14 +365,16 @@ function animate(time) {
         });
 
         // 2. Update Camera AFTER all physics are settled
+        cameraController.enabled = flightController.cameraLocked;
         if (flightController.cameraLocked) {
-            trackTarget(flightController.ship.position, flightController.ship.quaternion);
+            cameraController.trackTarget(flightController.ship.position, flightController.ship.quaternion);
         } else {
-            flightController.updateCamera(delta);
+            flightController.updateCameraPosition(delta);
         }
+        flightController.updateCameraEffects(delta);
 
         // Update Warp Points
-        warpPoints.forEach(async wp => {
+        sectorManager.warpPoints.forEach(async wp => {
             wp.isCourseTarget = false;
             if (starMap.plannedPath.length > 1) {
                 const nextSector = starMap.plannedPath[1];
@@ -659,105 +393,40 @@ function animate(time) {
 
             // Only trigger jumps if game has started and not in cooldown
             const distToWP = flightController.ship.position.distanceTo(wp.position);
-            const isLocked = lockedGateCoords &&
-                wp.targetLatticePos.ix === lockedGateCoords.ix &&
-                wp.targetLatticePos.iy === lockedGateCoords.iy &&
-                wp.targetLatticePos.iz === lockedGateCoords.iz &&
-                distToWP < GATE_LOCKOUT_DIST;
+            const isLocked = sectorManager.lockedGateCoords &&
+                wp.targetLatticePos.ix === sectorManager.lockedGateCoords.ix &&
+                wp.targetLatticePos.iy === sectorManager.lockedGateCoords.iy &&
+                wp.targetLatticePos.iz === sectorManager.lockedGateCoords.iz &&
+                distToWP < sectorManager.GATE_LOCKOUT_DIST;
 
             // Autopilot safety: If autopilot is ON, ONLY trigger if this is the correct target
             const canTrigger = !flightController.autopilot || wp.isCourseTarget;
 
             if (isStarted && (time - lastJumpTime > 3000) && distToWP < 400 && !isLocked && canTrigger) {
                 lastJumpTime = time;
-                const isCorrectTarget = wp.isCourseTarget;
 
-                const oldLatticePos = { ...currentLatticePos };
-                currentLatticePos = wp.targetLatticePos;
-                lockedGateCoords = oldLatticePos; // Lock the return gate
+                const result = await executeWarpSequence({
+                    wp,
+                    currentLatticePos,
+                    universe,
+                    sectorManager,
+                    starMap,
+                    flightController,
+                    hud,
+                    nebularity,
+                    tts,
+                    nameGen,
+                    scene
+                });
 
-                currentSector = universe.getSector(currentLatticePos.ix, currentLatticePos.iy, currentLatticePos.iz);
-                universe.visitedSectors.add(currentSector.id);
-
-                // Prevent double triggers by clearing immediately
-                warpPoints.forEach(p => p.dispose(scene));
-                warpPoints = [];
-                hud.pois = [];
-
-                if (starMap.plannedPath.length > 1 && isCorrectTarget) {
-                    starMap.plannedPath.shift();
-                    if (starMap.plannedPath.length <= 1) {
-                        starMap.selectedSector = null;
-                        starMap.plannedPath = [];
-                        flightController.autopilot = false;
-                        flightController.cameraLocked = false;
-                        flightController.autopilotTarget = null;
-                        flightController.throttle.set(0, 0, 0);
-                        flightController.isHyperThrusting = false;
-                        document.getElementById('map-sidebar').classList.add('hidden');
-                        hud.addMessage("COURSE COMPLETE. DESTINATION REACHED.");
-                    } else {
-                        starMap.onSectorSelected(starMap.selectedSector, starMap.plannedPath);
-                    }
-                } else if (!isCorrectTarget) {
-                    if (flightController.autopilot && starMap.selectedSector) {
-                        hud.addMessage("OFF COURSE. RE-CALCULATING PATH TO DESTINATION...");
-                        starMap.currentSectorOrigin = currentSector;
-                        starMap.calculatePath(); // Re-calculate from new position
-
-                        // If we couldn't find a path from here, then we give up
-                        if (starMap.plannedPath.length <= 1) {
-                            hud.addMessage("AUTOPILOT ERROR: DESTINATION UNREACHABLE FROM CURRENT NODE.");
-                            flightController.autopilot = false;
-                            flightController.cameraLocked = false;
-                        }
-                    } else {
-                        starMap.plannedPath = [];
-                        starMap.selectedSector = null;
-                        flightController.autopilot = false;
-                        flightController.cameraLocked = false;
-                        document.getElementById('map-sidebar').classList.add('hidden');
-                    }
-                }
-
-                const transDuration = 12.0;
-                nebularity.morph(currentSector.seed, { duration: transDuration });
-                flightController.triggerWarp(transDuration);
-                hud.addMessage(`INITIATING HYPERSPACE JUMP...`);
-                hud.addMessage(`TRANSITIONING TO NODE: ${currentSector.id.toUpperCase()}...`);
-
-                const sectorName = nameGen.getName(currentSector.seed, 'sector');
-
-                // Start voice-over in background to mask the journey
-                (async () => {
-                    await tts.speak(`Entering ${sectorName}.`, { voice: 'af_alloy', speed: 1 });
-                    const attr = currentSector.attributes;
-                    const summary = `Luminosity; ${attr.luminosity}. Stability; ${attr.stability}. Resource density; ${attr.resources}.`;
-                    await tts.speak(summary, { voice: 'af_river', speed: 1 });
-                })();
-
-                await spawnPlanet(currentSector, true);
-
-                if (flightController.autopilot) {
-                    flightController.autopilotTarget = null;
-                    if (starMap.plannedPath.length > 1) {
-                        const nextSector = starMap.plannedPath[1];
-                        const nextWP = warpPoints.find(wp =>
-                            wp.targetLatticePos.ix === nextSector.coords.ix &&
-                            wp.targetLatticePos.iy === nextSector.coords.iy &&
-                            wp.targetLatticePos.iz === nextSector.coords.iz
-                        );
-                        if (nextWP) flightController.autopilotTarget = nextWP.position;
-                    }
-                }
-
-                starMap.refresh(currentSector);
+                currentLatticePos = result.newLatticePos;
+                currentSector = result.newSector;
             }
         });
 
         const targets = [];
-        planets.forEach(p => targets.push(p));
-        warpPoints.forEach(wp => targets.push(wp.mesh));
+        sectorManager.planets.forEach(p => targets.push(p));
+        sectorManager.warpPoints.forEach(wp => targets.push(wp.mesh));
 
         const sectorName = nameGen.getName(currentSector.seed, 'sector');
 
@@ -811,7 +480,7 @@ function animate(time) {
                 autopilotTarget: flightController.autopilotTarget ? { x: flightController.autopilotTarget.x, y: flightController.autopilotTarget.y, z: flightController.autopilotTarget.z } : null,
                 cameraLocked: flightController.cameraLocked,
                 cameraPosition: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-                orbitTarget: { x: orbitControls.target.x, y: orbitControls.target.y, z: orbitControls.target.z }
+                orbitTarget: { x: cameraController.target.x, y: cameraController.target.y, z: cameraController.target.z }
             });
         }
     }
@@ -842,8 +511,7 @@ window.addEventListener('keydown', (e) => {
         // Close Market if open
         const marketUI = document.getElementById('market-ui');
         if (marketUI && marketUI.classList.contains('active')) {
-            marketUI.classList.remove('active');
-            if (flightController) flightController.mouse.isLocked = false;
+            market.close();
             handled = true;
         }
 
@@ -873,7 +541,7 @@ window.addEventListener('keydown', (e) => {
         nebularity.morph(currentSector.seed, { duration: 2.0 });
         if (flightController) flightController.triggerWarp(2.0);
         hud.addMessage(`INITIATING BLIND JUMP...`);
-        setTimeout(() => spawnPlanet(currentSector), 1000);
+        setTimeout(() => sectorManager.spawn(currentSector), 1000);
     }
 
     if (e.code === 'Tab') {
@@ -905,7 +573,7 @@ window.addEventListener('keydown', (e) => {
                 hud.addMessage("AUTOPILOT ERROR: NO COURSE PLOTTED.");
             } else {
                 const nextSector = starMap.plannedPath[1];
-                const targetWP = warpPoints.find(wp =>
+                const targetWP = sectorManager.warpPoints.find(wp =>
                     wp.targetLatticePos.ix === nextSector.coords.ix &&
                     wp.targetLatticePos.iy === nextSector.coords.iy &&
                     wp.targetLatticePos.iz === nextSector.coords.iz
@@ -917,10 +585,10 @@ window.addEventListener('keydown', (e) => {
 
                     // Toggle Cinematic Camera
                     flightController.cameraLocked = flightController.autopilot;
-                    orbitControls.enabled = flightController.autopilot;
-                    if (orbitControls.enabled) {
-                        trackTarget(flightController.ship.position, flightController.ship.quaternion);
-                        orbitControls.update();
+                    cameraController.enabled = flightController.autopilot;
+                    if (cameraController.enabled) {
+                        cameraController.trackTarget(flightController.ship.position, flightController.ship.quaternion);
+                        cameraController.update();
                     }
 
                     hud.addMessage(flightController.autopilot ? "AUTOPILOT ENGAGED. ENTERING EXTERNAL VIEW." : "AUTOPILOT OFFLINE. MANUAL CONTROL.");
@@ -938,7 +606,7 @@ window.addEventListener('keydown', (e) => {
                         // Ensure links exist for the new current sector
                         universe.generateLinks(currentSector);
 
-                        const newTargetWP = warpPoints.find(wp =>
+                        const newTargetWP = sectorManager.warpPoints.find(wp =>
                             wp.targetLatticePos.ix === newNext.coords.ix &&
                             wp.targetLatticePos.iy === newNext.coords.iy &&
                             wp.targetLatticePos.iz === newNext.coords.iz
@@ -948,9 +616,9 @@ window.addEventListener('keydown', (e) => {
                             flightController.autopilot = true;
                             flightController.autopilotTarget = newTargetWP.position;
                             flightController.cameraLocked = true;
-                            orbitControls.enabled = true;
-                            trackTarget(flightController.ship.position, flightController.ship.quaternion);
-                            orbitControls.update();
+                            cameraController.enabled = true;
+                            cameraController.trackTarget(flightController.ship.position, flightController.ship.quaternion);
+                            cameraController.update();
                             hud.addMessage("NEW COURSE PLOTTED. AUTOPILOT ENGAGED.");
                         } else {
                             hud.addMessage("AUTOPILOT ERROR: WARP POINT MISMATCH. MANUAL RECOVERY REQUIRED.");
@@ -969,7 +637,7 @@ window.addEventListener('keydown', (e) => {
         let nearestPlanet = null;
         let minDist = 1000000;
 
-        planets.forEach(p => {
+        sectorManager.planets.forEach(p => {
             const d = flightController.ship.position.distanceTo(p.position);
             if (d < minDist) {
                 minDist = d;
@@ -979,7 +647,7 @@ window.addEventListener('keydown', (e) => {
 
         const planetRadius = nearestPlanet ? nearestPlanet.geometry.parameters.radius : 0;
         if (nearestPlanet && minDist < planetRadius + 1000) {
-            openMarket();
+            market.open(flightController, currentSector);
         } else {
             hud.addMessage("DOCKING FAILED. TOO FAR FROM PLANET SURFACE.");
         }
@@ -1004,7 +672,7 @@ window.addEventListener('keydown', (e) => {
 
         nebularity.morph(currentSector.seed, { duration: 1.0 });
         flightController.triggerWarp(1.0);
-        spawnPlanet(currentSector, true);
+        sectorManager.spawn(currentSector, true);
         starMap.refresh(currentSector);
         hud.addMessage(`DEV: JUMPED TO ${currentSector.id}`);
     }
