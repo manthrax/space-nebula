@@ -91,3 +91,6 @@ The UI is built using **HTML/CSS Grid** to keep panels pinned to the edges of th
 - `P`: Toggle Autopilot.
 - `B`: Open Trading/Market link (when near planets).
 - `Dev Mode`: Append `?dev=1` to the URL to enable auto-resume and cluster-spawning features.
+
+
+

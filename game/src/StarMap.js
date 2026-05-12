@@ -19,7 +19,7 @@ export default class StarMap {
         this.lineMat = new THREE.LineBasicMaterial({ color: 0x224466, transparent: true, opacity: 0.5, toneMapped: false, blending: THREE.AdditiveBlending });
         this.pathMat = new THREE.LineBasicMaterial({ color: 0x00ffaa, transparent: true, opacity: 1.0, toneMapped: false, blending: THREE.AdditiveBlending });
 
-        this.nodeGeo = new THREE.SphereGeometry(150, 8, 8);
+        this.nodeGeo = new THREE.SphereGeometry(250, 12, 12); // Slightly larger for better clicking
 
         // Instanced Rendering for Performance
         this.maxNodes = 2000;
@@ -205,7 +205,14 @@ export default class StarMap {
             node: new THREE.Color(0x224466),
             visited: new THREE.Color(0xffaa00),
             current: new THREE.Color(0xffffff),
-            selected: new THREE.Color(0x00ffaa)
+            selected: new THREE.Color(0x00ffaa),
+            market: {
+                ORE: new THREE.Color(0x888888),
+                FUEL: new THREE.Color(0xffaa00),
+                FOOD: new THREE.Color(0x00ff00),
+                TECH: new THREE.Color(0x00ffff),
+                LUXURY: new THREE.Color(0xff00ff)
+            }
         };
 
         for (let x = ix - range; x <= ix + range; x++) {
@@ -229,10 +236,19 @@ export default class StarMap {
 
                     // Update Instance
                     this._dummy.position.copy(s.pos);
-                    this._dummy.scale.set(1, 1, 1);
+                    const scale = 0.5 + (s.planetCount / 10.0); // Size represents planet count
+                    this._dummy.scale.set(scale, scale, scale);
                     this._dummy.updateMatrix();
                     this.instancedNodes.setMatrixAt(nodeCount, this._dummy.matrix);
-                    this.instancedNodes.setColorAt(nodeCount, col);
+
+                    // Add market color hint if visited
+                    if (this.universe.visitedSectors.has(s.id)) {
+                        const exportType = s.market.exports[0];
+                        const baseCol = colors.market[exportType] || colors.visited;
+                        this.instancedNodes.setColorAt(nodeCount, baseCol);
+                    } else {
+                        this.instancedNodes.setColorAt(nodeCount, col);
+                    }
 
                     this.nodeSectors[nodeCount] = s;
                     nodeCount++;
@@ -303,17 +319,38 @@ export default class StarMap {
             this.controls.update();
         }
 
-        // Pulse Current Node via Instance Matrix update
+        // Pulse Current and Selected Nodes
+        const pulse = 1.0 + Math.sin(performance.now() * 0.005) * 0.2;
+        let matrixNeedsUpdate = false;
+
         if (this.currentNodeIndex !== -1) {
             const s = this.nodeSectors[this.currentNodeIndex];
             if (s) {
-                const pulse = 1.0 + Math.sin(performance.now() * 0.005) * 0.2;
                 this._dummy.position.copy(s.pos);
-                this._dummy.scale.set(1.5 * pulse, 1.5 * pulse, 1.5 * pulse);
+                const baseScale = 0.5 + (s.planetCount / 10.0);
+                this._dummy.scale.set(baseScale * 1.5 * pulse, baseScale * 1.5 * pulse, baseScale * 1.5 * pulse);
                 this._dummy.updateMatrix();
                 this.instancedNodes.setMatrixAt(this.currentNodeIndex, this._dummy.matrix);
-                this.instancedNodes.instanceMatrix.needsUpdate = true;
+                matrixNeedsUpdate = true;
             }
+        }
+
+        if (this.selectedSector) {
+            // Find instance index for selected sector
+            const selectedIdx = this.nodeSectors.findIndex(s => s && s.id === this.selectedSector.id);
+            if (selectedIdx !== -1 && selectedIdx !== this.currentNodeIndex) {
+                const s = this.nodeSectors[selectedIdx];
+                this._dummy.position.copy(s.pos);
+                const baseScale = 0.5 + (s.planetCount / 10.0);
+                this._dummy.scale.set(baseScale * 1.2 * pulse, baseScale * 1.2 * pulse, baseScale * 1.2 * pulse);
+                this._dummy.updateMatrix();
+                this.instancedNodes.setMatrixAt(selectedIdx, this._dummy.matrix);
+                matrixNeedsUpdate = true;
+            }
+        }
+
+        if (matrixNeedsUpdate) {
+            this.instancedNodes.instanceMatrix.needsUpdate = true;
         }
 
         // Position dimmer

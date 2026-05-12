@@ -9,234 +9,136 @@ export default class HUD {
         this.scene = scene;
         this.camera = camera;
         
-        // --- DOM Elements ---
-        this.container = document.createElement('div');
-        this.container.id = 'hud-root';
-        this.container.innerHTML = `
-            <style>
-                #hud-root {
-                    position: absolute;
-                    top: 0; left: 0; width: 100%; height: 100%;
-                    pointer-events: none;
-                    font-family: 'JetBrains Mono', 'Courier New', monospace;
-                    color: #88ccff;
-                    user-select: none;
-                    text-shadow: 0 0 5px rgba(136, 204, 255, 0.4);
-                    z-index: 2000;
+        // --- HUD Containers (Inject into Master Layout) ---
+        const colLeft = document.getElementById('col-left');
+        const colRight = document.getElementById('col-right');
+        
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .readout {
+                padding: 12px;
+                background: rgba(0, 20, 30, 0.4);
+                border: 1px solid rgba(136, 204, 255, 0.1);
+                backdrop-filter: blur(8px);
+                pointer-events: auto;
+                box-sizing: border-box;
+                width: 100%;
+                color: #88ccff;
+                text-shadow: 0 0 5px rgba(136, 204, 255, 0.4);
+            }
+            .readout-left { border-left: 2px solid rgba(136, 204, 255, 0.5); }
+            .readout-right { border-right: 2px solid rgba(136, 204, 255, 0.5); text-align: right; }
+            .readout-header {
+                font-family: 'Outfit', sans-serif;
+                font-size: 0.6rem;
+                letter-spacing: 3px;
+                color: #88ccff;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                opacity: 0.7;
+                border-bottom: 1px solid rgba(136, 204, 255, 0.1);
+                padding-bottom: 4px;
+            }
+            .stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+            .stat-label { opacity: 0.5; font-size: 0.7rem; font-weight: 300; }
+            .stat-value { font-weight: 400; color: #fff; font-variant-numeric: tabular-nums; }
+            .bar-container { width: 100%; height: 2px; background: rgba(136, 204, 255, 0.1); margin: 6px 0 10px 0; }
+            .bar-fill { height: 100%; background: #88ccff; width: 0%; transition: width 0.3s ease; }
+            #messages {
+                height: 120px;
+                font-size: 0.75rem;
+                line-height: 1.5;
+                display: flex;
+                flex-direction: column-reverse;
+                gap: 6px;
+                overflow: hidden;
+                mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+            }
+            .msg-entry { border-left: 2px solid #88ccff; padding-left: 10px; animation: msgSlideIn 0.3s ease-out; }
+            @keyframes msgSlideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+            .coord-grid { display: flex; gap: 4px; font-size: 0.85rem; justify-content: flex-end; }
+            .coord-seg { width: 70px; text-align: right; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        `;
+        document.head.appendChild(style);
 
-                    display: grid;
-                    grid-template-areas:
-                        "tl . tr"
-                        "ml . mr"
-                        "bl . br";
-                    grid-template-columns: 350px 1fr 350px;
-                    grid-template-rows: auto 1fr auto;
-                    padding: 30px;
-                    box-sizing: border-box;
-                    gap: 20px;
-                }
+        // 1. Propulsion Readout
+        this.propulsion = document.createElement('div');
+        this.propulsion.className = 'readout readout-left';
+        this.propulsion.innerHTML = `
+            <div class="readout-header">Ship Systems // Propulsion</div>
+            <div class="stat-row"><span class="stat-label">THRUST</span><span class="stat-value"><span id="thrust-val">0</span>%</span></div>
+            <div class="bar-container"><div id="thrust-bar" class="bar-fill"></div></div>
+            <div class="stat-row"><span class="stat-label">CHARGE</span><span class="stat-value"><span id="charge-val">100</span>%</span></div>
+            <div class="bar-container"><div id="charge-bar" class="bar-fill" style="background: #ffcc00;"></div></div>
+            <div class="stat-row"><span class="stat-label">VELOCITY</span><span class="stat-value"><span id="speed-val">0.0</span> <span style="font-size: 0.6rem; opacity: 0.5;">m/s</span></span></div>
+        `;
+        colLeft.appendChild(this.propulsion);
 
-                #top-left { grid-area: tl; justify-self: start; width: 320px; }
-                #top-right-group { 
-                    grid-area: tr; 
-                    justify-self: end; 
-                    width: 320px;
-                    display: flex; 
-                    flex-direction: column; 
-                    gap: 20px; 
-                    align-items: flex-end;
-                }
-                #bottom-left { grid-area: bl; justify-self: start; align-self: end; width: 320px; }
-                #bottom-right { grid-area: br; justify-self: end; align-self: end; width: 320px; }
+        // 2. Message Log
+        this.log = document.createElement('div');
+        this.log.className = 'readout readout-left';
+        this.log.style.marginTop = 'auto'; // Push to bottom
+        this.log.innerHTML = `
+            <div class="readout-header">Comm Link // Message Log</div>
+            <div id="messages"></div>
+        `;
+        colLeft.appendChild(this.log);
 
-                #hud-root::before {
-                    content: " ";
-                    display: block;
-                    position: absolute;
-                    top: 0; left: 0; bottom: 0; right: 0;
-                    background: 
-                        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), 
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.05), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.05));
-                    z-index: -1;
-                    background-size: 100% 3px, 4px 100%;
-                    pointer-events: none;
-                    opacity: 0.3;
-                }
-
-                .readout {
-                    padding: 12px;
-                    background: rgba(0, 20, 30, 0.4);
-                    border: 1px solid rgba(136, 204, 255, 0.1);
-                    backdrop-filter: blur(8px);
-                    pointer-events: auto;
-                    box-sizing: border-box;
-                    width: 100%;
-                }
-
-                .readout-left { border-left: 2px solid rgba(136, 204, 255, 0.5); }
-                .readout-right { border-right: 2px solid rgba(136, 204, 255, 0.5); text-align: right; }
-
-                .readout-header {
-                    font-family: 'Outfit', sans-serif;
-                    font-size: 0.6rem;
-                    letter-spacing: 3px;
-                    color: #88ccff;
-                    margin-bottom: 10px;
-                    text-transform: uppercase;
-                    opacity: 0.7;
-                    border-bottom: 1px solid rgba(136, 204, 255, 0.1);
-                    padding-bottom: 4px;
-                }
-                
-                /* Remove old absolute positioning */
-                #top-left, #top-right, #bottom-left, #bottom-right, #economy-panel { top: auto; right: auto; bottom: auto; left: auto; }
-                
-                .stat-row {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 6px;
-                }
-
-                .stat-label { opacity: 0.5; font-size: 0.7rem; font-weight: 300; }
-                .stat-value { 
-                    font-weight: 400; 
-                    color: #fff; 
-                    font-variant-numeric: tabular-nums;
-                }
-
-                .bar-container { 
-                    width: 100%; 
-                    height: 2px; 
-                    background: rgba(136, 204, 255, 0.1); 
-                    margin: 6px 0 10px 0; 
-                    position: relative;
-                }
-                .bar-fill { 
-                    height: 100%; 
-                    background: #88ccff; 
-                    width: 0%; 
-                    transition: width 0.3s ease; 
-                }
-
-                #messages {
-                    height: 90px;
-                    font-size: 0.7rem;
-                    line-height: 1.5;
-                    display: flex;
-                    flex-direction: column-reverse;
-                    gap: 6px;
-                    overflow: hidden;
-                    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
-                    mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
-                }
-                .msg-entry {
-                    border-left: 2px solid #88ccff;
-                    padding-left: 10px;
-                    animation: msgSlideIn 0.3s ease-out;
-                    color: #88ccff;
-                }
-                @keyframes msgSlideIn {
-                    from { transform: translateX(-10px); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-
-                .glitch-flash {
-                    animation: glitchFlash 0.3s step-end;
-                }
-                @keyframes glitchFlash {
-                    0% { background: rgba(0, 255, 170, 0.1); }
-                    50% { background: rgba(0, 255, 170, 0.0); }
-                    100% { background: rgba(0, 255, 170, 0.0); }
-                }
-                .coord-grid {
-                    display: flex;
-                    gap: 4px;
-                    font-size: 0.85rem;
-                }
-                .coord-seg {
-                    width: 80px;
-                    text-align: right;
-                    color: #fff;
-                    white-space: nowrap;
-                    font-variant-numeric: tabular-nums;
-                }
-            </style>
-            
-            <div id="top-left" class="readout readout-left">
-                <div class="readout-header">Ship Systems // Propulsion</div>
-                <div class="stat-row">
-                    <span class="stat-label">THRUST OUTPUT</span>
-                    <span class="stat-value"><span id="thrust-val">0</span>%</span>
+        // 3. Navigation Data
+        this.nav = document.createElement('div');
+        this.nav.className = 'readout readout-right';
+        this.nav.innerHTML = `
+            <div class="readout-header">Navigation // Sector Data</div>
+            <div id="sector-id" style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; color: #fff;">UNKNOWN SECTOR</div>
+            <div class="stat-row" style="margin-top: 8px;">
+                <span class="stat-label">POS:</span>
+                <div class="coord-grid">
+                    <span class="coord-seg" id="pos-x">0</span>
+                    <span class="coord-seg" id="pos-y">0</span>
+                    <span class="coord-seg" id="pos-z">0</span>
                 </div>
-                <div class="bar-container"><div id="thrust-bar" class="bar-fill"></div></div>
-                
-                <div class="stat-row">
-                    <span class="stat-label">CORE CHARGE</span>
-                    <span class="stat-value"><span id="charge-val">100</span>%</span>
-                </div>
-                <div class="bar-container"><div id="charge-bar" class="bar-fill" style="background: #ffcc00; box-shadow: 0 0 15px rgba(255, 204, 0, 0.4);"></div></div>
-                
-                <div class="stat-row" style="margin-top: 10px;">
-                    <span class="stat-label">REL. VELOCITY</span>
-                    <span class="stat-value"><span id="speed-val">0.0</span> <span style="font-size: 0.6rem; opacity: 0.5;">m/s</span></span>
-                </div>
-            </div>
-
-            <div id="bottom-left" class="readout readout-left">
-                <div class="readout-header">Comm Link // Message Log</div>
-                <div id="messages"></div>
-            </div>
-
-            <div id="top-right-group">
-                <div id="top-right" class="readout readout-right">
-                    <div class="readout-header">Navigation // Sector Data</div>
-                    <div id="sector-id" style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; color: #fff;">UNKNOWN SECTOR</div>
-                    <div class="stat-row" style="margin-top: 8px;">
-                        <span class="stat-label">POS:</span>
-                        <div class="coord-grid">
-                            <span class="coord-seg" id="pos-x">0</span>
-                            <span class="coord-seg" id="pos-y">0</span>
-                            <span class="coord-seg" id="pos-z">0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="economy-panel" class="readout readout-right">
-                    <div class="readout-header">Wallet // Assets</div>
-                    <div class="stat-row">
-                        <span class="stat-label">CREDITS</span>
-                        <span class="stat-value" id="credits-val" style="color: #ffcc00;">0</span>
-                    </div>
-                    <div style="font-size: 0.7rem; margin-top: 10px; opacity: 0.8;">
-                        <div class="readout-header" style="font-size: 0.6rem; color: #88ccff;">Cargo Bay</div>
-                        <div id="inventory-list">EMPTY</div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="bottom-right" class="readout readout-right">
-                <div class="readout-header">Tactical // Local Scan</div>
-                <canvas id="tracker-canvas" width="268" height="120" style="display: block;"></canvas>
             </div>
         `;
-        document.body.appendChild(this.container);
-        
+        colRight.insertBefore(this.nav, document.getElementById('map-sidebar'));
+
+        // 4. Economy / Wallet
+        this.economy = document.createElement('div');
+        this.economy.className = 'readout readout-right';
+        this.economy.innerHTML = `
+            <div class="readout-header">Wallet // Assets</div>
+            <div class="stat-row"><span class="stat-label">CREDITS</span><span class="stat-value" id="credits-val" style="color: #ffcc00;">0</span></div>
+            <div id="inventory-list" style="font-size: 0.7rem; margin-top: 6px; opacity: 0.8;">EMPTY</div>
+        `;
+        colRight.appendChild(this.economy);
+
+        // 5. Tactical Scan
+        this.scan = document.createElement('div');
+        this.scan.className = 'readout readout-right';
+        this.scan.style.marginTop = 'auto'; // Push to bottom
+        this.scan.innerHTML = `
+            <div class="readout-header">Tactical // Local Scan</div>
+            <canvas id="tracker-canvas" width="268" height="120" style="display: block; margin-left: auto;"></canvas>
+        `;
+        colRight.appendChild(this.scan);
+
         // Cache DOM references
-        this.thrustVal = this.container.querySelector('#thrust-val');
-        this.thrustBar = this.container.querySelector('#thrust-bar');
-        this.speedVal = this.container.querySelector('#speed-val');
-        this.chargeVal = this.container.querySelector('#charge-val');
-        this.chargeBar = this.container.querySelector('#charge-bar');
-        this.sectorId = this.container.querySelector('#sector-id');
-        this.posX = this.container.querySelector('#pos-x');
-        this.posY = this.container.querySelector('#pos-y');
-        this.posZ = this.container.querySelector('#pos-z');
-        this.messages = this.container.querySelector('#messages');
-        this.creditsVal = this.container.querySelector('#credits-val');
-        this.inventoryList = this.container.querySelector('#inventory-list');
-        this.trackerCanvas = this.container.querySelector('#tracker-canvas');
+        this.thrustVal = document.getElementById('thrust-val');
+        this.thrustBar = document.getElementById('thrust-bar');
+        this.speedVal = document.getElementById('speed-val');
+        this.chargeVal = document.getElementById('charge-val');
+        this.chargeBar = document.getElementById('charge-bar');
+        this.sectorId = document.getElementById('sector-id');
+        this.posX = document.getElementById('pos-x');
+        this.posY = document.getElementById('pos-y');
+        this.posZ = document.getElementById('pos-z');
+        this.messages = document.getElementById('messages');
+        this.creditsVal = document.getElementById('credits-val');
+        this.inventoryList = document.getElementById('inventory-list');
+        this.trackerCanvas = document.getElementById('tracker-canvas');
         this.trackerCtx = this.trackerCanvas.getContext('2d');
+        
+        this.container = { style: { display: 'block' } }; // Shim for visibility logic
+        this.readouts = [this.propulsion, this.log, this.nav, this.economy, this.scan];
         
         this.updateTimer = 0;
         this.updateInterval = 0.1; // 100ms throttle for text
@@ -249,12 +151,12 @@ export default class HUD {
     }
 
     hide() {
-        this.container.style.display = 'none';
+        this.readouts.forEach(r => r.style.display = 'none');
         this.pois.forEach(p => p.group.visible = false);
     }
 
     show() {
-        this.container.style.display = 'block';
+        this.readouts.forEach(r => r.style.display = 'block');
         this.pois.forEach(p => p.group.visible = true);
     }
 
@@ -354,14 +256,38 @@ export default class HUD {
 
             const pulse = (Math.sin(Date.now() * 0.01) + 1) * 0.5;
             const isCourse = target.userData && target.userData.isCourseTarget;
+            const type = target.userData ? target.userData.type : 'unknown';
 
             ctx.fillStyle = isCourse ? '#00ffaa' : (isOutOfRange ? '#ff4100' : '#88ccff');
             ctx.globalAlpha = isOutOfRange ? 0.4 : 0.8;
 
-            // Draw target dot
+            // Draw glyph based on type
             ctx.beginPath();
-            ctx.arc(tx, ty, isCourse ? 4 : 2.5, 0, Math.PI * 2);
-            ctx.fill();
+            if (type === 'planet') {
+                // Circle glyph for planets
+                ctx.arc(tx, ty, isCourse ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (type === 'warp') {
+                // Diamond glyph for warp points
+                ctx.save();
+                ctx.translate(tx, ty);
+                ctx.rotate(Math.PI / 4);
+                const s = isCourse ? 5 : 3.5;
+                ctx.rect(-s/2, -s/2, s, s);
+                ctx.restore();
+                ctx.fill();
+            } else if (type === 'ship') {
+                // Triangle glyph for other ships
+                ctx.moveTo(tx, ty - 4);
+                ctx.lineTo(tx - 3.5, ty + 3);
+                ctx.lineTo(tx + 3.5, ty + 3);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Default dot
+                ctx.arc(tx, ty, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             // Altitude indicator line
             ctx.strokeStyle = ctx.fillStyle;

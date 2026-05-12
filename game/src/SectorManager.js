@@ -12,7 +12,7 @@ export default class SectorManager {
         this.planets = [];
         this.warpPoints = [];
         this.lockedGateCoords = null;
-        this.GATE_LOCKOUT_DIST = 1000;
+        this.GATE_LOCKOUT_DIST = 300; // Smaller than spawn distance (500) to allow immediate return
         this.urlParams = new URLSearchParams(window.location.search);
         
         this.flightController = null; // Set later after ship is loaded
@@ -53,7 +53,7 @@ export default class SectorManager {
 
         // 1. Generate Planets
         const isStartSystem = sector.coords.ix === 0 && sector.coords.iy === 0 && sector.coords.iz === 0;
-        const planetCount = (isStartSystem && this.urlParams.get('dev') === '1') ? 10 : (rng() < 0.4 ? 1 : 0);
+        const planetCount = (isStartSystem && this.urlParams.get('dev') === '1') ? 10 : sector.planetCount;
 
         for (let i = 0; i < planetCount; i++) {
             const pSeed = seed + "-" + i;
@@ -74,7 +74,10 @@ export default class SectorManager {
                 transparent: true,
                 opacity: 0.9,
                 depthWrite: false,
-                side: THREE.DoubleSide
+                side: THREE.DoubleSide,
+                polygonOffset: true,
+                polygonOffsetFactor: -4,
+                polygonOffsetUnits: -4
             });
             const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
             planet.add(cloudMesh);
@@ -86,6 +89,7 @@ export default class SectorManager {
             this.scene.add(planet);
             this.planets.push(planet);
             planet.userData.seed = pSeed;
+            planet.userData.type = 'planet';
 
             const planetName = this.nameGen.getName(pSeed, 'planet');
             this.hud.addTargetPOI(planet.position, planetName);
@@ -145,13 +149,36 @@ export default class SectorManager {
                 this.flightController.velocity.copy(dirAway.normalize().multiplyScalar(200));
             }
         });
+
+        // 3. Spawn Ambient NPC Ships
+        const shipCount = 2 + Math.floor(rng() * 3);
+        for (let i = 0; i < shipCount; i++) {
+            // Clone the ship mesh if possible, or create a simple proxy
+            if (this.flightController && this.flightController.ship) {
+                const shipMesh = this.flightController.ship.children[0].clone(true);
+                const dist = 3000 + rng() * 5000;
+                const angle = rng() * Math.PI * 2;
+                shipMesh.position.set(Math.cos(angle) * dist, (rng() - 0.5) * 3000, Math.sin(angle) * dist);
+                shipMesh.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+                shipMesh.userData.type = 'ship';
+                this.scene.add(shipMesh);
+                this.planets.push(shipMesh); // Add to planets array for cleanup convenience
+
+                // Randomly name some of them
+                if (rng() < 0.3) {
+                    const npcName = "VESSEL: " + this.nameGen.getName(seed + "-npc-" + i, 'sector');
+                    this.hud.addTargetPOI(shipMesh.position, npcName);
+                }
+            }
+        }
     }
 
     updateRotations(delta) {
         this.planets.forEach(p => {
+            if (p.userData.type !== 'planet') return;
             p.rotation.y += delta * 0.05;
             p.children.forEach(child => {
-                child.rotation.y += delta * 0.03;
+                if (child.isMesh) child.rotation.y += delta * 0.03;
             });
         });
     }

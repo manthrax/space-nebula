@@ -53,8 +53,10 @@ export default class MarketUI {
     }
 
     open(flightController, currentSector) {
-        this.flightController = flightController;
-        this.currentSector = currentSector;
+        if (flightController) this.flightController = flightController;
+        if (currentSector) this.currentSector = currentSector;
+
+        if (!this.currentSector) return; // Guard against opening without a sector context
 
         if (this.flightController && this.flightController.mouseLookEnabled) {
             this.flightController.mouseLookEnabled = false;

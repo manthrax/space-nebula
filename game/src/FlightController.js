@@ -249,7 +249,37 @@ export default class FlightController {
         this._quatScratch.setFromEuler(this._eulerScratch);
         this.ship.quaternion.multiply(this._quatScratch);
 
-        // 5. Apply Drag
+        // 5. Planet Collision
+        if (state.nearestPlanetRadius > 0 && state.nearestPlanetPos) {
+            const padding = 20; // Ship radius/buffer
+            const minAllowedDist = state.nearestPlanetRadius + padding;
+            
+            // Recalculate distance based on new position
+            const currentDist = this.ship.position.distanceTo(state.nearestPlanetPos);
+            
+            if (currentDist < minAllowedDist) {
+                // Normal is from planet center toward ship
+                const normal = this.ship.position.clone().sub(state.nearestPlanetPos).normalize();
+                const penetration = minAllowedDist - currentDist;
+                
+                // Resolve penetration
+                this.ship.position.addScaledVector(normal, penetration);
+                
+                // Reflect velocity if moving toward surface
+                const dot = this.velocity.dot(normal);
+                if (dot < 0) {
+                    // v = v - 2 * (v . n) * n
+                    this.velocity.addScaledVector(normal, -1.5 * dot); // 1.5 = bounce factor
+                    this.velocity.multiplyScalar(0.5); // Impact loss
+                }
+                
+                // Jolt rotation
+                this.rotationVelocity.x += (Math.random() - 0.5) * 2;
+                this.rotationVelocity.y += (Math.random() - 0.5) * 2;
+            }
+        }
+
+        // 6. Apply Drag
         const dragFactor = Math.pow(this.drag, delta * 60);
         const angularDragFactor = Math.pow(this.angularDrag, delta * 60);
         this.velocity.multiplyScalar(dragFactor);

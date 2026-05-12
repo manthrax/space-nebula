@@ -41,12 +41,24 @@ export default class UniverseManager {
             seed: Math.floor(rng() * 0xFFFFFF).toString(16),
             name: "UNEXPLORED",
             links: [],
+            planetCount: Math.floor(rng() * 8) + 2, // 2-10 planets
             attributes: {
                 luminosity: lums[Math.floor(rng() * lums.length)],
                 stability: stabs[Math.floor(rng() * stabs.length)],
                 resources: res[Math.floor(rng() * res.length)]
+            },
+            market: {
+                needs: [],
+                exports: []
             }
         };
+
+        // Determine trade needs/exports based on seed
+        const commodities = ["ORE", "FUEL", "FOOD", "TECH", "LUXURY"];
+        const exportIdx = Math.floor(rng() * commodities.length);
+        const needIdx = (exportIdx + 1 + Math.floor(rng() * (commodities.length - 1))) % commodities.length;
+        sector.market.exports.push(commodities[exportIdx]);
+        sector.market.needs.push(commodities[needIdx]);
 
         this.sectors.set(key, sector);
         return sector;

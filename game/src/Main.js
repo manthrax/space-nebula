@@ -61,11 +61,36 @@ starMap.onSectorSelected = (sector, path) => {
     const sidebar = document.getElementById('map-sidebar');
     const name = nameGen.getName(sector.seed, 'sector');
     sidebar.innerHTML = `
-        <div style="font-size: 1.2rem; border-bottom: 1px solid #00ffaa; margin-bottom: 10px;">${name}</div>
-        <div>GRID: [${sector.coords.ix}, ${sector.coords.iy}, ${sector.coords.iz}]</div>
-        <div style="margin-top: 10px; color: #88ccff;">STATUS: ${universe.visitedSectors.has(sector.id) ? 'EXPLORED' : 'UNMAPPED'}</div>
-        <div style="margin-top: 20px;">PATH STEPS: ${path.length > 0 ? path.length - 1 : 'N/A'}</div>
-        ${path.length > 0 ? '<div style="color: #00ffaa; margin-top: 10px;">> COURSE PLOTTED</div>' : ''}
+        <div style="font-size: 1.2rem; border-bottom: 1px solid #00ffaa; margin-bottom: 10px; color: #00ffaa;">${name}</div>
+        <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 15px;">COORD: [${sector.coords.ix}, ${sector.coords.iy}, ${sector.coords.iz}]</div>
+        
+        <div class="map-detail-row">
+            <span>PLANETS:</span>
+            <span style="color: #fff;">${sector.planetCount}</span>
+        </div>
+        <div class="map-detail-row">
+            <span>RESOURCES:</span>
+            <span style="color: #fff;">${sector.attributes.resources}</span>
+        </div>
+        
+        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(0,255,170,0.2);">
+            <div style="font-size: 0.7rem; color: #00ffaa; margin-bottom: 5px;">MARKET DATA</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+                <span style="color: #00ffaa;">EXPORTS:</span>
+                <span style="color: #fff;">${sector.market.exports.join(', ')}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 5px;">
+                <span style="color: #ffaa00;">NEEDS:</span>
+                <span style="color: #fff;">${sector.market.needs.join(', ')}</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px; font-size: 0.8rem;">
+            <div style="color: #88ccff;">STATUS: ${universe.visitedSectors.has(sector.id) ? 'EXPLORED' : 'UNMAPPED'}</div>
+            <div style="margin-top: 5px;">PATH STEPS: ${path.length > 0 ? path.length - 1 : 'N/A'}</div>
+        </div>
+        
+        ${path.length > 0 ? '<div style="color: #00ffaa; margin-top: 15px; font-weight: bold;">> COURSE PLOTTED</div>' : ''}
     `;
     sidebar.classList.remove('hidden');
 };
@@ -351,6 +376,7 @@ function animate(time) {
         let nearestP = null;
         let minDist = 1000000;
         sectorManager.planets.forEach(p => {
+            if (p.userData.type !== 'planet') return;
             const d = flightController.ship.position.distanceTo(p.position);
             if (d < minDist) {
                 minDist = d;
@@ -360,6 +386,8 @@ function animate(time) {
 
         flightController.update(delta, {
             nearestPlanetDist: minDist,
+            nearestPlanetRadius: nearestP && nearestP.geometry && nearestP.geometry.parameters ? nearestP.geometry.parameters.radius : 0,
+            nearestPlanetPos: nearestP ? nearestP.position : null,
             atmosphereThreshold: 3000,
             nearestPlanetDir: nearestP ? nearestP.position.clone().sub(flightController.ship.position).normalize() : null
         });
@@ -401,6 +429,11 @@ function animate(time) {
 
             // Autopilot safety: If autopilot is ON, ONLY trigger if this is the correct target
             const canTrigger = !flightController.autopilot || wp.isCourseTarget;
+
+            // Clear lockout if we've moved away
+            if (isLocked && distToWP > sectorManager.GATE_LOCKOUT_DIST + 100) {
+                sectorManager.lockedGateCoords = null;
+            }
 
             if (isStarted && (time - lastJumpTime > 3000) && distToWP < 400 && !isLocked && canTrigger) {
                 lastJumpTime = time;
@@ -450,10 +483,10 @@ function animate(time) {
             shieldSystem.update(delta, elapsed, {
                 thrust: flightController.thrustInput,
                 speed: flightController.velocity.length(),
-                nearestPlanetDist: minDist - (nearestP ? nearestP.geometry.parameters.radius * 0.1 : 0),
+                nearestPlanetDist: minDist - (nearestP && nearestP.geometry && nearestP.geometry.parameters ? nearestP.geometry.parameters.radius * 0.1 : 0),
                 atmosphereThreshold: 2000,
                 nearestPlanetPos: nearestP ? nearestP.position : null,
-                planetRadius: nearestP ? nearestP.geometry.parameters.radius : 0
+                planetRadius: (nearestP && nearestP.geometry && nearestP.geometry.parameters) ? nearestP.geometry.parameters.radius : 0
             });
         }
 

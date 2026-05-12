@@ -55,6 +55,7 @@ export default class WarpPoint {
 
         this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), material);
         this.mesh.position.copy(this.position);
+        this.mesh.userData.type = 'warp';
         this.isCourseTarget = false;
         scene.add(this.mesh);
     }

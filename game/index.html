@@ -125,39 +125,53 @@
             text-align: center;
         }
 
-        #ui-master-grid {
+        #ui-layout {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
             display: grid;
             grid-template-columns: 350px 1fr 350px;
-            grid-template-rows: 1fr 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
             padding: 30px;
             box-sizing: border-box;
             gap: 20px;
+            pointer-events: none;
             z-index: 1001;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
         }
 
-        #ui-master-grid > * {
+        .ui-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .ui-column > * {
             pointer-events: auto;
         }
 
+        #col-left { grid-column: 1; }
+        #col-center { grid-column: 2; align-items: center; justify-content: center; }
+        #col-right { grid-column: 3; align-items: flex-end; }
+
+        .map-detail-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 4px;
+        }
+
         #map-sidebar {
-            grid-column: 3;
-            grid-row: 1;
-            justify-self: end;
-            width: 320px;
+            width: 100%;
             background: rgba(0, 20, 30, 0.4);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(136, 204, 255, 0.1);
             border-right: 2px solid rgba(136, 204, 255, 0.5);
             padding: 20px;
             color: #88ccff;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-            transition: opacity 0.3s;
-            align-self: start;
-            margin-top: 150px; /* Offset to sit below Nav panel */
             box-sizing: border-box;
         }
 
@@ -166,10 +180,6 @@
         }
 
         #market-ui {
-            grid-column: 2;
-            grid-row: 2;
-            justify-self: center;
-            align-self: center;
             width: 540px;
             background: rgba(0, 10, 20, 0.95);
             backdrop-filter: blur(20px);
@@ -177,12 +187,10 @@
             border-right: 4px solid rgba(136, 204, 255, 0.6);
             border-radius: 2px;
             padding: 40px;
-            z-index: 2000;
             display: none;
             flex-direction: column;
             color: #88ccff;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
-            pointer-events: auto;
+            box-sizing: border-box;
         }
 
         #market-ui.active {
@@ -245,24 +253,28 @@
         </div>
     </div>
 
-    <div id="ui-master-grid">
-        <div id="map-sidebar" class="hidden"></div>
-        
-        <div id="market-ui">
-            <div
-                style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; color: #00ffaa; margin-bottom: 20px; display: flex; justify-content: space-between;">
-                <span>TRADING TERMINAL</span>
-                <span id="market-credits" style="color: #ffcc00;">0 CR</span>
-            </div>
-            <div style="display: flex; gap: 20px;">
-                <div id="planet-list-container" style="flex-grow: 1;">
-                    <div id="market-list"></div>
+    <div id="ui-layout">
+        <div id="col-left" class="ui-column"></div>
+        <div id="col-center" class="ui-column">
+            <div id="market-ui">
+                <div
+                    style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; color: #00ffaa; margin-bottom: 20px; display: flex; justify-content: space-between;">
+                    <span>TRADING TERMINAL</span>
+                    <span id="market-credits" style="color: #ffcc00;">0 CR</span>
                 </div>
-                <div id="planet-preview-container" style="width: 200px; height: 200px; background: transparent; border: 1px solid rgba(136,204,255,0.2); position: relative; overflow: hidden; pointer-events: none;">
-                    <div style="position: absolute; top: 5px; left: 5px; font-size: 0.6rem; color: #00ffaa; z-index: 10;">PLANETARY LINK: ACTIVE</div>
+                <div style="display: flex; gap: 20px;">
+                    <div id="planet-list-container" style="flex-grow: 1;">
+                        <div id="market-list"></div>
+                    </div>
+                    <div id="planet-preview-container" style="width: 200px; height: 200px; background: transparent; border: 1px solid rgba(136,204,255,0.2); position: relative; overflow: hidden; pointer-events: none;">
+                        <div style="position: absolute; top: 5px; left: 5px; font-size: 0.6rem; color: #00ffaa; z-index: 10;">PLANETARY LINK: ACTIVE</div>
+                    </div>
                 </div>
+                <button class="menu-btn" id="closeMarket" style="margin-top: 20px; width: 100%;">CLOSE LINK</button>
             </div>
-            <button class="menu-btn" id="closeMarket" style="margin-top: 20px; width: 100%;">CLOSE LINK</button>
+        </div>
+        <div id="col-right" class="ui-column">
+            <div id="map-sidebar" class="hidden"></div>
         </div>
     </div>
     <script type="module" src="./src/Main.js"></script>
